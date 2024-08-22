@@ -15,27 +15,27 @@ __version__ = '0.2.2'
 TABLE_REGISTRY = {}
 
 
-class TypeMap(NamedTuple):
+class TypeEntry(NamedTuple):
     sql_type: str
     is_blob : bool
 
 
 TYPE_MAPPING = {
     # standard types
-    str:        TypeMap('TEXT',    False),
-    int:        TypeMap('INTEGER', False),
-    float:      TypeMap('REAL',    False),
+    str:        TypeEntry('TEXT',    False),
+    int:        TypeEntry('INTEGER', False),
+    float:      TypeEntry('REAL',    False),
 
     # BOOLEAN will effectively be mapped to NUMERIC due to type affinity,
     # because sqlite does not have a native BOOL type (see
     # https://www.sqlite.org/datatype3.html for more details)
-    bool:       TypeMap('BOOLEAN', False),
+    bool:       TypeEntry('BOOLEAN', False),
 
     # special and custom types that are considered blobs
-    bytes:      TypeMap('BLOB',    True),
-    bytearray:  TypeMap('BLOB',    True),
-    memoryview: TypeMap('BLOB',    True),
-    np.ndarray: TypeMap('ndarray', True),
+    bytes:      TypeEntry('BLOB',    True),
+    bytearray:  TypeEntry('BLOB',    True),
+    memoryview: TypeEntry('BLOB',    True),
+    np.ndarray: TypeEntry('ndarray', True),
 }
 
 
