@@ -1,1 +1,10 @@
+TODO
+====
+* insertmany -> use executemany 
+* transactions
+
+
+DONE
+====
 * lazy db_enum
+* simple conditions for select

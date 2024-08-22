@@ -89,6 +89,62 @@ class Equals(Condition):
         return f"{self.column} = ?", [self.value]
 
 
+class NotEquals(Condition):
+    def __init__(self, column: str, value: Any):
+        self.column = column
+        self.value = value
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} != ?", [self.value]
+
+
+class GreaterThan(Condition):
+    def __init__(self, column: str, value: Any):
+        self.column = column
+        self.value = value
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} > ?", [self.value]
+
+
+class LessThan(Condition):
+    def __init__(self, column: str, value: Any):
+        self.column = column
+        self.value = value
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} < ?", [self.value]
+
+
+class Between(Condition):
+    def __init__(self, column: str, lower: Any, upper: Any):
+        self.column = column
+        self.lower = lower
+        self.upper = upper
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} BETWEEN ? AND ?", [self.lower, self.upper]
+
+
+class Like(Condition):
+    def __init__(self, column: str, pattern: str):
+        self.column = column
+        self.pattern = pattern
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} LIKE ?", [self.pattern]
+
+
+class In(Condition):
+    def __init__(self, column: str, values: List[Any]):
+        self.column = column
+        self.values = values
+
+    def build(self) -> Tuple[str, List[Any]]:
+        placeholders = ', '.join(['?'] * len(self.values))
+        return f"{self.column} IN ({placeholders})", self.values
+
+
 class And(Condition):
     def __init__(self, *conditions: Condition):
         self.conditions = conditions
@@ -117,26 +173,7 @@ class Or(Condition):
         return " OR ".join(clauses), parameters
 
 
-class Like(Condition):
-    def __init__(self, column: str, pattern: str):
-        self.column = column
-        self.pattern = pattern
-
-    def build(self) -> Tuple[str, List[Any]]:
-        return f"{self.column} LIKE ?", [self.pattern]
-
-
-class In(Condition):
-    def __init__(self, column: str, values: List[Any]):
-        self.column = column
-        self.values = values
-
-    def build(self) -> Tuple[str, List[Any]]:
-        placeholders = ', '.join(['?'] * len(self.values))
-        return f"{self.column} IN ({placeholders})", self.values
-
-
-def sql_builder_mk_table(tspec: TableSpec) -> str:
+def sql_builder_create_table(tspec: TableSpec) -> str:
     sql = "CREATE TABLE {} (".format(tspec.name)
     sql += ", ".join("{} {}".format(k, v) for k, v in tspec.fields.__dict__.items())
     if tspec.foreign_keys is not None and len(tspec.foreign_keys) > 0:
@@ -289,17 +326,24 @@ def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_
     context.con.commit()
 
 
+def insert_from_class(context: DatabaseContext, data: Type, replace_existing=True):
+    insert_sql = data._tinysql_insert if not replace_existing else data._tinysql_insert_replace
+    insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k))
+
+
+def insert_from_dict(context: DatabaseContext, data: Dict, tspec: TableSpec, replace_existing=True):
+    insert_sql = sql_builder_insert(tspec, replace_existing)
+    insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k])
+
+
 def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace_existing=True):
     if hasattr(data, '_tinysql_tspec'):
-        insert_sql = data._tinysql_insert if not replace_existing else data._tinysql_insert_replace
-        insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k))
+        insert_from_class(context, data, replace_existing)
 
     elif isinstance(data, dict):
-        if tspec is not None:
-            insert_sql = sql_builder_insert(tspec, replace_existing)
-            insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k])
-        else:
-            raise RuntimeError(f"TableSpec missing")
+        if tspec is None:
+            raise RuntimeError(f"TableSpec must be provided for dictionary")
+        insert_from_dict(context, data, tspec, replace_existing)
 
     else:
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
@@ -353,7 +397,7 @@ def setup_db(db_path: Path | str, table_storage_root: Path | str | None):
         if table_exists(context.con, tspec.name):
             continue
 
-        sql = sql_builder_mk_table(tspec)
+        sql = sql_builder_create_table(tspec)
         cur.execute(sql)
         context.con.commit()
         if init_fn is None:
