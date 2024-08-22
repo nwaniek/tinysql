@@ -107,7 +107,7 @@ def db_enum(tablename: str, descriptions: Dict[str, str] = {}):
     return decorator
 
 
-def get_tspec(cls: Type | str):
+def get_tspec(cls: Type | str) -> TableSpec:
     if isinstance(cls, str):
         tentry = TABLE_REGISTRY.get(cls, None)
         if tentry is not None:
@@ -124,7 +124,7 @@ def get_tspec(cls: Type | str):
         raise RuntimeError(f"Type not mapped to database: {cls}.")
 
 
-def sql_builder_mk_table(tspec: TableSpec):
+def sql_builder_mk_table(tspec: TableSpec) -> str:
     sql = "CREATE TABLE {} (".format(tspec.name)
     sql += ", ".join("{} {}".format(k, v) for k, v in tspec.fields.__dict__.items())
     if tspec.foreign_keys is not None and len(tspec.foreign_keys) > 0:
@@ -135,7 +135,7 @@ def sql_builder_mk_table(tspec: TableSpec):
     return sql
 
 
-def sql_builder_insert(tspec: TableSpec, replace_existing = False):
+def sql_builder_insert(tspec: TableSpec, replace_existing : bool = False) -> str:
     modifier = "or REPLACE" if replace_existing else "" # "or IGNORE"
     sql = f"INSERT {modifier} INTO {tspec.name}"
     sql += "("
@@ -146,7 +146,7 @@ def sql_builder_insert(tspec: TableSpec, replace_existing = False):
     return sql
 
 
-def dump(context, tspec, fieldname, data, obj, get_fn):
+def dump(context, tspec: TableSpec, fieldname: str, data, obj, get_fn: Callable) -> str:
     if obj is None:
         return ""
 
