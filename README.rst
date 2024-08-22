@@ -63,7 +63,7 @@ A brief example could look as follows:
 .. code-block:: python
 
     from typing import NamedTuple
-    from tinysql import DatabaseContext, Equals, Or, select, db_table
+    from tinysql import DatabaseContext, Equals, Or, In, select, db_table
 
     # this is an example class that is derived from NamedTuple and mapped to the
     # database. It contains spiking data from neural recordings for a particular
@@ -97,6 +97,11 @@ A brief example could look as follows:
         for result in results:
             print(result)
 
+        # tinysql supports most SQL WHERE conditionals, so instead of combining
+        # an OR and two Equals, we could also do instead of the previous
+        results = select(context, SpikeData, In('animal_name', ['Fievel', 'Tanya']))
+        for result in results:
+            print(result)
 
 Of course, we also often use all kinds of enums to identify stuff or flag things.
 And, obviously, you should map your enums to the database, too.
