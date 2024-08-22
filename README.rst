@@ -81,10 +81,48 @@ A brief example could look as follows:
     # storage of BLOBs and ndarrays should happen outside the database, i.e. on
     # disk
     with DatabaseContext('database.db', '/path/to/external/storage') as context:
-        # use some basic Conditionals (Equals, Or, ...) to restrict results
+
+        # load some data from, preprocess, etc...
+        # once you have SpikeData with your data, we can insert it
+        the_data = np.load('original_data_file_n123.npy')
+        spikes = SpikeData(get_sha1('original_data_file_n123.npy'), 'Fievel', 123, the_data, "Data from Fievel's 123rd neuron")
+        # we can either use the free function "insert", or the context method:
+        context.insert(spikes)
+        # is equvalent to: insert(context, spikes)
+
+        # do something else, and now we want to analyse the data from Fievel and
+        # Tanya. We can do so by using use some basic Conditionals (Equals, Or, ...)
+        # to restrict results
         results = select(context, SpikeData, Or(Equals('animal_name', 'Fievel'), Equals('animal_name', 'Tanya')))
         for result in results:
             print(result)
+
+
+Of course, we also often use all kinds of enums to identify stuff or flag things.
+And, obviously, you should map your enums to the database, too.
+This is why `tinysql` supports all standard python enum types.
+
+.. code-block:: python
+
+    from tinysql import db_enum
+
+    # for instance, we might want to use an enum to identify the brain region
+    # in which the spike data was recorded in
+    @db_enum("RecordingArea", descriptions={'PPC': 'Posterior Parietal Cortex', 'EC': 'Entorhinal Cortex', 'CA1': 'Cornu Ammonis 1', 'CA3': 'Cornu Ammonus 3'})
+    class RecordingArea(Enum):
+        PPC = "PPC"
+        EC  = "EC"
+        CA1 = "CA1"
+        CA3 = "CA3"
+
+    # db_enum doesn't care about the enum type, and you can also omit the
+    # description if you don't want to document things in the database
+    @dbenum('MyIntEnum')
+    class MyIntEnum(IntEnum):
+        One: auto()
+        Two: auto()
+        Three: auto()
+
 
 
 Contributing
