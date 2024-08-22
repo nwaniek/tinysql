@@ -1,5 +1,5 @@
-tinysql - A tiny object-relational mapper
-=========================================
+tinysql - A minimalistic object-relational mapper
+=================================================
 
 Intro: mostly tabular, in computational neuroscience, data science, analytics,
 time series analysis, machine learning & AI, etc.

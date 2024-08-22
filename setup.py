@@ -5,7 +5,7 @@ from setuptools import setup
 setup(
     name='tinysql',
     version='0.2.1',
-    description='A minimalistic ORM for sqlite',
+    description='A minimalistic object-relational mapper',
     author='Nicolai Waniek',
     author_email='rochus@rochus.net',
     py_modules=["tinysql"],
