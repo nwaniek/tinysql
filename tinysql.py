@@ -349,7 +349,7 @@ def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, repla
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
 
 
-def select(context: DatabaseContext, cls: Type, condition: Condition | None = None):
+def select(context: DatabaseContext, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
     if not hasattr(cls, '_tinysql_select'):
         raise TypeError("Type not mapped to database: {cls}")
 
@@ -358,6 +358,11 @@ def select(context: DatabaseContext, cls: Type, condition: Condition | None = No
     if condition:
         where, params = condition.build()
         sql += f" WHERE {where}"
+
+    if limit is not None:
+        sql += f" LIMIT {limit}"
+        if offset is not None:
+            sql += f" OFFSET {offset}"
 
     cur = context.con.cursor()
     for row in cur.execute(sql, params):

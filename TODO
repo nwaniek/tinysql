@@ -2,9 +2,10 @@ TODO
 ====
 * insertmany -> use executemany 
 * transactions
-
+* select() -> specify return type (return instances, dicts, tuples, etc), and also SQL instead of cls
 
 DONE
 ====
 * lazy db_enum
 * simple conditions for select
+* limit and offset select()
