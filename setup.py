@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='tinysql',
-    version='0.2.1',
+    version='0.2.2',
     description='A minimalistic object-relational mapper',
     author='Nicolai Waniek',
     author_email='n@rochus.net',
