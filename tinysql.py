@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import NamedTuple, Tuple, Callable, List, get_type_hints, Type
+from typing import NamedTuple, Tuple, Callable, List, Dict, get_type_hints, Type
 import io
 import sqlite3
 import pickle
@@ -19,7 +19,7 @@ TYPE_MAPPING = {
     float:      'REAL',
 
     # BOOLEAN will effectively be mapped to NUMERIC due to type affinity,
-    # meaning sqlite does not have a real BOOL type (see
+    # because sqlite does not have a native BOOL type (see
     # https://www.sqlite.org/datatype3.html for more details)
     bool:       'BOOLEAN',
 
@@ -65,10 +65,44 @@ def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys
         if tablename in TABLE_REGISTRY:
             raise ValueError(f"Duplicate table name detected: {tablename}")
 
-        cls._db_table_spec = ts
-        cls._db_init_fn    = init_fn
+        cls._tinysql_table_spec = ts
+        cls._tinysql_init_fn    = init_fn
         TABLE_REGISTRY[tablename] = TableRegistryEntry(ts, init_fn, cls)
         return cls
+    return decorator
+
+
+
+class db_enum_initfn:
+    def __init__(self, tablename, values):
+        self.tablename = tablename
+        self.values = values
+
+    def __call__(self, con):
+        cur = con.cursor()
+        cur.executemany(f"INSERT INTO {self.tablename} (value, name, description) VALUES (?, ?, ?)", self.values)
+        con.commit()
+
+
+def db_enum(tablename: str, descriptions: Dict[str, str] = {}):
+    def decorator(cls):
+        # test type of members. cannot work with mixed type enums
+        types = [type(f.value) for f in cls]
+        if types.count(types[0]) != len(types):
+            raise TypeError("Mixed-type enums are not supported.")
+
+        # turn enum into a tablespec
+        ts = TableSpec(tablename)
+        ts.fields.value       = TYPE_MAPPING[types[0]]
+        ts.fields.name        = "TEXT"
+        ts.fields.description = "TEXT"
+        ts.primary_keys       = ["value"]
+
+        cls._tinysql_table_spec = ts
+        cls._tinysql_init_fn    = db_enum_initfn(tablename, [(f.value, f._name_, descriptions.get(f._name_, "")) for f in cls])
+
+        return cls
+
     return decorator
 
 
@@ -83,9 +117,9 @@ def sql_builder_mk_table(tspec: TableSpec):
     return sql
 
 
-def sql_builder_insert(tspec: TableSpec, replace = True):
-    modifier = "REPLACE" if replace else "IGNORE"
-    sql = "INSERT or {} INTO {}".format(modifier, tspec.name)
+def sql_builder_insert(tspec: TableSpec, replace_existing = False):
+    modifier = "or REPLACE" if replace_existing else "" # "or IGNORE"
+    sql = "INSERT {} INTO {}".format(modifier, tspec.name)
     sql += "("
     sql += ", ".join(key for key in tspec.fields.__dict__.keys())
     sql += ") VALUES ("
