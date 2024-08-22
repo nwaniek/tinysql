@@ -3,6 +3,7 @@ TODO
 * insertmany -> use executemany 
 * transactions
 * select() -> specify return type (return instances, dicts, tuples, etc), and also SQL instead of cls
+* documentation
 
 DONE
 ====
