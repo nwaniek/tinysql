@@ -50,7 +50,7 @@ To install `tinysql`, simply run
 
 .. code-block:: sh
 
-    $ pip install tinyql
+    $ pip install tinysql
 
 
 Usage
