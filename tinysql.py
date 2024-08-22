@@ -72,7 +72,6 @@ def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys
     return decorator
 
 
-
 class db_enum_initfn:
     def __init__(self, tablename, values):
         self.tablename = tablename
