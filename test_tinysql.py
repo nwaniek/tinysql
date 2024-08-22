@@ -24,14 +24,14 @@ def test_insert(context):
 
     # insert via object
     values = AmazingValues(1, "hello, world!", 123.12, np.ones((4, 4)))
-    tinysql.insert(context, values)
+    context.insert(values)
 
     # insert as a dict with corresponding tablespec
     values = {'id': 2,
               'value0': 'world, hello!',
               'value1': 71.71,
               'value2': np.eye(10)}
-    tinysql.insert(context, values, tinysql.get_tspec(AmazingValues))
+    context.insert(values, tinysql.get_tspec(AmazingValues))
 
     # print everything in the table
     sql = "SELECT * FROM AmazingValues"
@@ -48,7 +48,14 @@ def test_enum(context):
         print(f"MyEnum.{row[1]} = '{row[0]}' # {row[2]}")
 
 
+def test_select(context):
+    results = tinysql.select(context, AmazingValues)
+    for obj in results:
+        print(obj)
+
+
 if __name__ == "__main__":
     with tinysql.setup_db('test.sqlite', 'test_storage') as context:
-        test_insert(context)
-        test_enum(context)
+        # test_insert(context)
+        # test_enum(context)
+        test_select(context)

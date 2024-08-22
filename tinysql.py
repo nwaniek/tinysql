@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import NamedTuple, Tuple, Callable, List, Dict, Union, get_type_hints, Type
+from typing import NamedTuple, Tuple, Callable, List, Dict, Any, get_type_hints, Type
 import io
 import sqlite3
 import pickle
@@ -49,79 +49,30 @@ class TableRegistryEntry(NamedTuple):
     cls     : Type
 
 
-def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys: List[Tuple[str, str]] | None = None, init_fn: Callable | None = None):
-    def decorator(cls):
-        ts = TableSpec(tablename)
-        annotations = get_type_hints(cls)
-        for field_name, field_type in annotations.items():
-            if field_type in TYPE_MAPPING:
-                setattr(ts.fields, field_name, TYPE_MAPPING[field_type])
-            else:
-                raise ValueError(f"Unsupported field type: {field_type} for field {field_name}")
+class DatabaseContext:
+    def __init__(self, db_path: Path, table_storage_root: Path | None):
+        self.registry             = {}
+        self.db_path              = db_path
+        self.table_storage_root   = table_storage_root
+        self.use_external_storage = table_storage_root is not None
+        if not self.use_external_storage:
+            sqlite3.register_adapter(np.ndarray, adapt_array)
+            sqlite3.register_converter("ndarray", convert_array)
+        self.con = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
 
-            ts.primary_keys = primary_keys or []
-            ts.foreign_keys = foreign_keys or []
+        self.insert_fn = insert
 
-        if tablename in TABLE_REGISTRY:
-            raise ValueError(f"Duplicate table name detected: {tablename}")
+    def close(self):
+        self.con.close()
 
-        cls._tinysql_tspec   = ts
-        cls._tinysql_init_fn = init_fn
-        TABLE_REGISTRY[tablename] = TableRegistryEntry(ts, init_fn, cls)
-        return cls
-    return decorator
+    def insert(self, data, tspec: TableSpec | None = None, replace_existing=True):
+        self.insert_fn(self, data, tspec, replace_existing)
 
+    def __enter__(self):
+        return self
 
-class db_enum_initfn:
-    def __init__(self, tablename, values):
-        self.tablename = tablename
-        self.values = values
-
-    def __call__(self, con):
-        cur = con.cursor()
-        cur.executemany(f"INSERT INTO {self.tablename} (value, name, description) VALUES (?, ?, ?)", self.values)
-        con.commit()
-
-
-def db_enum(tablename: str, descriptions: Dict[str, str] = {}):
-    def decorator(cls):
-        # test type of members. cannot work with mixed type enums
-        types = [type(f.value) for f in cls]
-        if types.count(types[0]) != len(types):
-            raise TypeError("Mixed-type enums are not supported.")
-
-        # turn enum into a tablespec
-        ts = TableSpec(tablename)
-        ts.fields.value       = TYPE_MAPPING[types[0]]
-        ts.fields.name        = "TEXT"
-        ts.fields.description = "TEXT"
-        ts.primary_keys       = ["value"]
-
-        if tablename in TABLE_REGISTRY:
-            raise ValueError(f"Duplicate table name detected: {tablename}")
-
-        cls._tinysql_tspec   = ts
-        cls._tinysql_init_fn = db_enum_initfn(tablename, [(f.value, f._name_, descriptions.get(f._name_, "")) for f in cls])
-        TABLE_REGISTRY[tablename] = TableRegistryEntry(ts, cls._tinysql_init_fn, cls)
-        return cls
-    return decorator
-
-
-def get_tspec(cls: Type | str) -> TableSpec:
-    if isinstance(cls, str):
-        tentry = TABLE_REGISTRY.get(cls, None)
-        if tentry is not None:
-            return tentry.tspec
-        raise RuntimeError(f"Type not mapped to database: {cls}.")
-
-    elif hasattr(cls, '_tinysql_tspec'):
-        return cls._tinysql_tspec
-
-    else:
-        tentry = TABLE_REGISTRY.get(cls.__name__, None)
-        if tentry is not None:
-            return tentry.tspec
-        raise RuntimeError(f"Type not mapped to database: {cls}.")
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.close()
 
 
 def sql_builder_mk_table(tspec: TableSpec) -> str:
@@ -144,6 +95,96 @@ def sql_builder_insert(tspec: TableSpec, replace_existing : bool = False) -> str
     sql += ", ".join("?" for _ in range(len(tspec.fields.__dict__)))
     sql += ");"
     return sql
+
+
+def sql_builder_select(tspec: TableSpec) -> str:
+    fieldstr = ', '.join(vars(tspec.fields))
+    sql = f"SELECT {fieldstr} FROM {tspec.name}"
+    return sql
+
+
+def register_tspec(registry, cls, tablename: str, tspec: TableSpec, init_fn: Callable | None):
+    cls._tinysql_tspec = tspec
+    cls._tinysql_init_fn = init_fn
+    cls._tinysql_insert = sql_builder_insert(tspec, False)
+    cls._tinysql_insert_replace = sql_builder_insert(tspec, True)
+    cls._tinysql_select = sql_builder_select(tspec)
+    registry[tablename] = TableRegistryEntry(tspec, init_fn, cls)
+    return cls
+
+
+def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys: List[Tuple[str, str]] | None = None, init_fn: Callable | None = None,  context: DatabaseContext | None = None):
+    def decorator(cls):
+        ts = TableSpec(tablename)
+        annotations = get_type_hints(cls)
+        for field_name, field_type in annotations.items():
+            if field_type in TYPE_MAPPING:
+                setattr(ts.fields, field_name, TYPE_MAPPING[field_type])
+            else:
+                raise ValueError(f"Unsupported field type: {field_type} for field {field_name}")
+
+            ts.primary_keys = primary_keys or []
+            ts.foreign_keys = foreign_keys or []
+
+        registry = context.registry if context else TABLE_REGISTRY
+        if tablename in registry:
+            raise ValueError(f"Duplicate table name detected: {tablename}")
+
+        cls = register_tspec(registry, cls, tablename, ts, init_fn)
+        return cls
+    return decorator
+
+
+class db_enum_initfn:
+    def __init__(self, tablename, values):
+        self.tablename = tablename
+        self.values = values
+
+    def __call__(self, con):
+        cur = con.cursor()
+        cur.executemany(f"INSERT INTO {self.tablename} (value, name, description) VALUES (?, ?, ?)", self.values)
+        con.commit()
+
+
+def db_enum(tablename: str, descriptions: Dict[str, str] = {}, context: DatabaseContext | None = None):
+    def decorator(cls):
+        # test type of members. cannot work with mixed type enums
+        types = [type(f.value) for f in cls]
+        if types.count(types[0]) != len(types):
+            raise TypeError("Mixed-type enums are not supported.")
+
+        # turn enum into a tablespec
+        ts = TableSpec(tablename)
+        ts.fields.value       = TYPE_MAPPING[types[0]]
+        ts.fields.name        = "TEXT"
+        ts.fields.description = "TEXT"
+        ts.primary_keys       = ["value"]
+
+        registry = context.registry if context else TABLE_REGISTRY
+        if tablename in registry:
+            raise ValueError(f"Duplicate table name detected: {tablename}")
+
+        init_fn = db_enum_initfn(tablename, [(f.value, f._name_, descriptions.get(f._name_, "")) for f in cls])
+        cls = register_tspec(registry, cls, tablename, ts, init_fn)
+        return cls
+    return decorator
+
+
+def get_tspec(cls: Type | str) -> TableSpec:
+    if isinstance(cls, str):
+        tentry = TABLE_REGISTRY.get(cls, None)
+        if tentry is not None:
+            return tentry.tspec
+        raise RuntimeError(f"Type not mapped to database: {cls}.")
+
+    elif hasattr(cls, '_tinysql_tspec'):
+        return cls._tinysql_tspec
+
+    else:
+        tentry = TABLE_REGISTRY.get(cls.__name__, None)
+        if tentry is not None:
+            return tentry.tspec
+        raise RuntimeError(f"Type not mapped to database: {cls}.")
 
 
 def dump(context, tspec: TableSpec, fieldname: str, data, obj, get_fn: Callable) -> str:
@@ -170,8 +211,7 @@ def dump(context, tspec: TableSpec, fieldname: str, data, obj, get_fn: Callable)
     return str(tspec_dir / fname)
 
 
-def insert_impl(context, data, tspec: TableSpec, get_fn: Callable):
-    sql = sql_builder_insert(tspec)
+def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_fn: Callable):
     _data = tuple()
 
     # build the data for the sqlite table
@@ -188,18 +228,30 @@ def insert_impl(context, data, tspec: TableSpec, get_fn: Callable):
     context.con.commit()
 
 
-def insert(context, data, tspec: TableSpec | None = None):
+def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace_existing=True):
     if hasattr(data, '_tinysql_tspec'):
-        insert_impl(context, data, data._tinysql_tspec, lambda d, k: getattr(d, k))
+        insert_sql = data._tinysql_insert if not replace_existing else data._tinysql_insert_replace
+        insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k))
 
     elif isinstance(data, dict):
         if tspec is not None:
-            insert_impl(context, data, tspec, lambda d, k: d[k])
+            insert_sql = sql_builder_insert(tspec, replace_existing)
+            insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k])
         else:
             raise RuntimeError(f"TableSpec missing")
 
     else:
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
+
+
+def select(context: DatabaseContext, cls: Type):
+    if not hasattr(cls, '_tinysql_select'):
+        raise TypeError("Type not mapped to database: {cls}")
+
+    sql = cls._tinysql_select
+    cur = context.con.cursor()
+    for row in cur.execute(sql):
+        yield cls(*row)
 
 
 def table_exists(con, tablename):
@@ -221,26 +273,6 @@ def convert_array(text):
     out = io.BytesIO(text)
     out.seek(0)
     return np.load(out)
-
-
-class DatabaseContext:
-    def __init__(self, db_path: Path, table_storage_root: Path | None):
-        self.db_path              = db_path
-        self.table_storage_root   = table_storage_root
-        self.use_external_storage = table_storage_root is not None
-        if not self.use_external_storage:
-            sqlite3.register_adapter(np.ndarray, adapt_array)
-            sqlite3.register_converter("ndarray", convert_array)
-        self.con = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
-
-    def close(self):
-        self.con.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.close()
 
 
 def setup_db(db_path: Path | str, table_storage_root: Path | str | None):
