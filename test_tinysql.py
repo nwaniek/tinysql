@@ -49,7 +49,7 @@ def test_enum(context):
 
 
 def test_select(context):
-    results = tinysql.select(context, AmazingValues)
+    results = tinysql.select(context, AmazingValues, tinysql.In('id', [1, 2, 3]))
     for obj in results:
         print(obj)
 

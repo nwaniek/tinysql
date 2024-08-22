@@ -75,6 +75,67 @@ class DatabaseContext:
         self.close()
 
 
+class Condition:
+    def build(self) -> Tuple[str, List[Any]]:
+        raise NotImplementedError
+
+
+class Equals(Condition):
+    def __init__(self, column: str, value: Any):
+        self.column = column
+        self.value = value
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} = ?", [self.value]
+
+
+class And(Condition):
+    def __init__(self, *conditions: Condition):
+        self.conditions = conditions
+
+    def build(self) -> Tuple[str, List[Any]]:
+        clauses = []
+        parameters = []
+        for condition in self.conditions:
+            clause, params = condition.build()
+            clauses.append(f"({clause})")
+            parameters.extend(params)
+        return " AND ".join(clauses), parameters
+
+
+class Or(Condition):
+    def __init__(self, *conditions: Condition):
+        self.conditions = conditions
+
+    def build(self) -> Tuple[str, List[Any]]:
+        clauses = []
+        parameters = []
+        for condition in self.conditions:
+            clause, params = condition.build()
+            clauses.append(f"({clause})")
+            parameters.extend(params)
+        return " OR ".join(clauses), parameters
+
+
+class Like(Condition):
+    def __init__(self, column: str, pattern: str):
+        self.column = column
+        self.pattern = pattern
+
+    def build(self) -> Tuple[str, List[Any]]:
+        return f"{self.column} LIKE ?", [self.pattern]
+
+
+class In(Condition):
+    def __init__(self, column: str, values: List[Any]):
+        self.column = column
+        self.values = values
+
+    def build(self) -> Tuple[str, List[Any]]:
+        placeholders = ', '.join(['?'] * len(self.values))
+        return f"{self.column} IN ({placeholders})", self.values
+
+
 def sql_builder_mk_table(tspec: TableSpec) -> str:
     sql = "CREATE TABLE {} (".format(tspec.name)
     sql += ", ".join("{} {}".format(k, v) for k, v in tspec.fields.__dict__.items())
@@ -244,17 +305,22 @@ def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, repla
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
 
 
-def select(context: DatabaseContext, cls: Type):
+def select(context: DatabaseContext, cls: Type, condition: Condition | None = None):
     if not hasattr(cls, '_tinysql_select'):
         raise TypeError("Type not mapped to database: {cls}")
 
     sql = cls._tinysql_select
+    params = []
+    if condition:
+        where, params = condition.build()
+        sql += f" WHERE {where}"
+
     cur = context.con.cursor()
-    for row in cur.execute(sql):
+    for row in cur.execute(sql, params):
         yield cls(*row)
 
 
-def table_exists(con, tablename):
+def table_exists(con, tablename: str) -> bool:
     query = f"SELECT name FROM sqlite_master WHERE type='table' AND name='{tablename}';";
     cur = con.cursor()
     cur.execute(query)
@@ -262,14 +328,14 @@ def table_exists(con, tablename):
     return row is not None
 
 
-def adapt_array(arr):
+def adapt_array(arr: np.ndarray):
     out = io.BytesIO()
     np.save(out, arr)
     out.seek(0)
     return sqlite3.Binary(out.read())
 
 
-def convert_array(text):
+def convert_array(text) -> np.ndarray:
     out = io.BytesIO(text)
     out.seek(0)
     return np.load(out)
