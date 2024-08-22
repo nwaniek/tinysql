@@ -19,7 +19,7 @@ By not abstracting away SQL, `tinysql` ensures that users can fully leverage SQL
 
 Why `tinysql`?
 --------------
-While more powerful alternatives like SQLAlchemy or DataJoint are available, they often come with additional complexity.
+While more powerful alternatives like `SQLAlchemy <https://www.sqlalchemy.org>`_ or `DataJoint <https://www.datajoint.com/>`_ are available, they often come with additional complexity.
 `tinysql` addresses the need for a straightforward, minimalistic solution by focusing on:
 
 * **Simplicity**: Avoids the overhead of complex ORM frameworks.
