@@ -5,8 +5,12 @@ TODO
 * select() -> specify return type (return instances, dicts, tuples, etc), and also SQL instead of cls
 * documentation
 
+
 DONE
 ====
 * lazy db_enum
 * simple conditions for select
 * limit and offset select()
+* define Binary type that gets mapped to BLOB. also, mark BLOB, ndarray as types
+  that might be dumped, while other types won't (TYPE_MAPPING -> ("ndarray",
+  True) or similar, to reduce hard-coding types)

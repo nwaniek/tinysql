@@ -15,19 +15,27 @@ __version__ = '0.2.1'
 TABLE_REGISTRY = {}
 
 
+class TypeMap(NamedTuple):
+    sql_type: str
+    is_blob : bool
+
+
 TYPE_MAPPING = {
     # standard types
-    str:        'TEXT',
-    int:        'INTEGER',
-    float:      'REAL',
+    str:        TypeMap('TEXT',    False),
+    int:        TypeMap('INTEGER', False),
+    float:      TypeMap('REAL',    False),
 
     # BOOLEAN will effectively be mapped to NUMERIC due to type affinity,
     # because sqlite does not have a native BOOL type (see
     # https://www.sqlite.org/datatype3.html for more details)
-    bool:       'BOOLEAN',
+    bool:       TypeMap('BOOLEAN', False),
 
-    # special and custom types
-    np.ndarray: 'ndarray',
+    # special and custom types that are considered blobs
+    bytes:      TypeMap('BLOB',    True),
+    bytearray:  TypeMap('BLOB',    True),
+    memoryview: TypeMap('BLOB',    True),
+    np.ndarray: TypeMap('ndarray', True),
 }
 
 
@@ -50,36 +58,6 @@ class TableRegistryEntry(NamedTuple):
     tspec   : TableSpec
     init_fn : Callable | None
     cls     : Type
-
-
-class DatabaseContext:
-    def __init__(self, db_path: Path, table_storage_root: Path | None):
-        self.registry             = {}
-        self.db_path              = db_path
-        self.table_storage_root   = table_storage_root
-        self.use_external_storage = table_storage_root is not None
-        if not self.use_external_storage:
-            sqlite3.register_adapter(np.ndarray, adapt_array)
-            sqlite3.register_converter("ndarray", convert_array)
-        self.con = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
-
-        self.insert_fn = insert
-        self.select_fn = select
-
-    def close(self):
-        self.con.close()
-
-    def insert(self, data, tspec: TableSpec | None = None, replace_existing=True):
-        self.insert_fn(self, data, tspec, replace_existing)
-
-    def select(self, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
-        self.select_fn(self, cls, condition, limit, offset)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.close()
 
 
 class Condition:
@@ -180,9 +158,39 @@ class Or(Condition):
         return " OR ".join(clauses), parameters
 
 
+class DatabaseContext:
+    def __init__(self, db_path: Path, table_storage_root: Path | None):
+        self.registry             = {}
+        self.db_path              = db_path
+        self.table_storage_root   = table_storage_root
+        self.use_external_storage = table_storage_root is not None
+        if not self.use_external_storage:
+            sqlite3.register_adapter(np.ndarray, adapt_array)
+            sqlite3.register_converter("ndarray", convert_array)
+        self.con = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+
+        self.insert_fn = insert
+        self.select_fn = select
+
+    def close(self):
+        self.con.close()
+
+    def insert(self, data, tspec: TableSpec | None = None, replace_existing=True):
+        self.insert_fn(self, data, tspec, replace_existing)
+
+    def select(self, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
+        self.select_fn(self, cls, condition, limit, offset)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.close()
+
+
 def sql_builder_create_table(tspec: TableSpec) -> str:
-    sql = "CREATE TABLE {} (".format(tspec.name)
-    sql += ", ".join("{} {}".format(k, v) for k, v in tspec.fields.__dict__.items())
+    sql = f"CREATE TABLE {tspec.name} ("
+    sql += ", ".join(f"{fname} {tmap.sql_type}" for fname, tmap in tspec.fields.__dict__.items())
     if tspec.foreign_keys is not None and len(tspec.foreign_keys) > 0:
         sql += ", " + ", ".join("FOREIGN KEY ({}) REFERENCES {}".format(fk[0], fk[1]) for fk in tspec.foreign_keys)
     if tspec.primary_keys is not None and len(tspec.primary_keys) > 0:
@@ -261,8 +269,8 @@ def db_enum(tablename: str, descriptions: Dict[str, str] = {}, context: Database
         # turn enum into a tablespec
         ts = TableSpec(tablename)
         ts.fields.value       = TYPE_MAPPING[types[0]]
-        ts.fields.name        = "TEXT"
-        ts.fields.description = "TEXT"
+        ts.fields.name        = TYPE_MAPPING[str]
+        ts.fields.description = TYPE_MAPPING[str]
         ts.primary_keys       = ["value"]
 
         registry = context.registry if context else TABLE_REGISTRY
@@ -321,7 +329,7 @@ def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_
 
     # build the data for the sqlite table
     for fname, ftype in tspec.fields.__dict__.items():
-        if context.use_external_storage and ftype.lower() in ['blob', 'ndarray']:
+        if ftype.is_blob and context.use_external_storage:
             fpath = dump(context, tspec, fname, data, get_fn(data, fname), get_fn)
             _data = _data + (fpath, )
         else:
