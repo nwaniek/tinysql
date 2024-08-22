@@ -63,12 +63,16 @@ class DatabaseContext:
         self.con = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
 
         self.insert_fn = insert
+        self.select_fn = select
 
     def close(self):
         self.con.close()
 
     def insert(self, data, tspec: TableSpec | None = None, replace_existing=True):
         self.insert_fn(self, data, tspec, replace_existing)
+
+    def select(self, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
+        self.select_fn(self, cls, condition, limit, offset)
 
     def __enter__(self):
         return self
