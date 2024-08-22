@@ -1,1 +1,2 @@
-tinysql.egg-info
+tinysql.egg-info/
+__pycache__/
