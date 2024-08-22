@@ -107,13 +107,20 @@ def db_enum(tablename: str, descriptions: Dict[str, str] = {}):
     return decorator
 
 
-def get_tspec(cls: Type):
-    if hasattr(cls, '_tinysql_tspec'):
+def get_tspec(cls: Type | str):
+    if isinstance(cls, str):
+        tentry = TABLE_REGISTRY.get(cls, None)
+        if tentry is not None:
+            return tentry.tspec
+        raise RuntimeError(f"Type not mapped to database: {cls}.")
+
+    elif hasattr(cls, '_tinysql_tspec'):
         return cls._tinysql_tspec
+
     else:
-        tspec = TABLE_REGISTRY.get(cls.__name__, None)
-        if tspec is not None:
-            return tspec
+        tentry = TABLE_REGISTRY.get(cls.__name__, None)
+        if tentry is not None:
+            return tentry.tspec
         raise RuntimeError(f"Type not mapped to database: {cls}.")
 
 
