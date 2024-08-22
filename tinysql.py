@@ -11,6 +11,7 @@ import numpy as np
 
 __version__ = '0.2.1'
 
+
 TABLE_REGISTRY = {}
 
 
