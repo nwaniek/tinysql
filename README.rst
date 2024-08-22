@@ -48,7 +48,7 @@ Installation
 
 To install `tinysql`, simply run
 
-..code-block:: sh
+.. code-block:: sh
 
     $ pip install tinyql
 
@@ -60,7 +60,7 @@ To use Tinysql, you define your tables and interact with your database using min
 A brief example could look as follows:
 
 
-..code-block:: python
+.. code-block:: python
 
     from typing import NamedTuple
     from tinysql import DatabaseContext, Equals, Or, select, db_table
