@@ -56,7 +56,7 @@ To install `tinysql`, simply run
 Usage
 -----
 
-To use Tinysql, you define your tables and interact with your database using minimalistic ORM methods.
+To use `tinysql`, you define your tables and interact with your database using minimalistic ORM methods.
 A brief example could look as follows:
 
 
