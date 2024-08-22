@@ -104,7 +104,7 @@ A brief example could look as follows:
             print(result)
 
 Of course, we also often use all kinds of enums to identify stuff or flag things.
-And, obviously, you should map your enums to the database, too.
+And, obviously, you should map our enums to the database, too.
 This is why `tinysql` supports all standard python enum types.
 
 .. code-block:: python
