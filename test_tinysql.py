@@ -4,10 +4,14 @@ from enum import Enum
 from typing import NamedTuple
 import tinysql
 import numpy as np
+import uuid
+
+def gen_uuid():
+    return uuid.uuid4().hex
 
 @tinysql.db_table("AmazingValues", primary_keys=["id"])
 class AmazingValues(NamedTuple):
-    id:     int
+    id:     str
     value0: str
     value1: float
     value2: np.ndarray
@@ -23,11 +27,11 @@ def test_insert(context):
     print("Table 'AmazingValues' exists:", tinysql.table_exists(context.con, "AmazingValues"))
 
     # insert via object
-    values = AmazingValues(1, "hello, world!", 123.12, np.ones((4, 4)))
+    values = AmazingValues(gen_uuid(), "hello, world!", 123.12, np.ones((4, 4)))
     context.insert(values)
 
     # insert as a dict with corresponding tablespec
-    values = {'id': 2,
+    values = {'id': gen_uuid(),
               'value0': 'world, hello!',
               'value1': 71.71,
               'value2': np.eye(10)}
@@ -49,13 +53,13 @@ def test_enum(context):
 
 
 def test_select(context):
-    results = tinysql.select(context, AmazingValues, tinysql.In('id', [1, 2, 3]))
+    results = tinysql.select(context, AmazingValues, tinysql.GreaterThan('value1', 70.0))
     for obj in results:
         print(obj)
 
 
 if __name__ == "__main__":
     with tinysql.setup_db('test.sqlite', 'test_storage') as context:
-        # test_insert(context)
-        # test_enum(context)
+        test_insert(context)
+        test_enum(context)
         test_select(context)
