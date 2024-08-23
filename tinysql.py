@@ -11,7 +11,7 @@ import pickle
 import numpy as np
 
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 
 TABLE_REGISTRY = {}
