@@ -223,11 +223,11 @@ class DatabaseContext:
     def close(self):
         self.con.close()
 
-    def insert(self, data, tspec: TableSpec | None = None, replace_existing=True):
-        self.insert_fn(self, data, tspec, replace_existing)
+    def insert(self, data, tspec: TableSpec | None = None, replace=True):
+        self.insert_fn(self, data, tspec, replace)
 
-    def insertmany(self, data, tspec: TableSpec | None = None, replace_existing=True):
-        self.insertmany_fn(self, data, tspec, replace_existing)
+    def insertmany(self, data, tspec: TableSpec | None = None, replace=True):
+        self.insertmany_fn(self, data, tspec, replace)
 
     def select(self, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
         self.select_fn(self, cls, condition, limit, offset)
@@ -268,8 +268,8 @@ def sql_builder_create_table(tspec: TableSpec) -> str:
     return sql
 
 
-def sql_builder_insert(tspec: TableSpec, replace_existing : bool = False) -> str:
-    modifier = "or REPLACE" if replace_existing else "" # "or IGNORE"
+def sql_builder_insert(tspec: TableSpec, replace : bool = False) -> str:
+    modifier = "or REPLACE" if replace else "" # "or IGNORE"
 
     # filter out autoincrement fields (they will be updated by sqlite)
     fields = []
@@ -423,24 +423,24 @@ def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_
     context.con.commit()
 
 
-def insert_from_class(context: DatabaseContext, data: Type, replace_existing=True):
-    insert_sql = data._tinysql_insert if not replace_existing else data._tinysql_insert_replace
+def insert_from_class(context: DatabaseContext, data: Type, replace=True):
+    insert_sql = data._tinysql_insert if not replace else data._tinysql_insert_replace
     insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k))
 
 
-def insert_from_dict(context: DatabaseContext, data: Dict, tspec: TableSpec, replace_existing=True):
-    insert_sql = sql_builder_insert(tspec, replace_existing)
+def insert_from_dict(context: DatabaseContext, data: Dict, tspec: TableSpec, replace=True):
+    insert_sql = sql_builder_insert(tspec, replace)
     insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k])
 
 
-def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace_existing = True):
+def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace = True):
     if hasattr(data, '_tinysql_tspec'):
-        insert_from_class(context, data, replace_existing)
+        insert_from_class(context, data, replace)
 
     elif isinstance(data, dict):
         if tspec is None:
             raise RuntimeError(f"TableSpec must be provided for dictionary")
-        insert_from_dict(context, data, tspec, replace_existing)
+        insert_from_dict(context, data, tspec, replace)
 
     else:
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
@@ -458,36 +458,36 @@ def group_by_type(data: List[object]):
     return grouped_data
 
 
-def insertmany_from_class(context: DatabaseContext, data: list[Type], replace_existing=True):
+def insertmany_from_class(context: DatabaseContext, data: list[Type], replace=True):
     groups = group_by_type(data)
     for group in groups:
         tspec = group[0]._tinysql_tspec
-        sql = group[0]._tinysql_insert if not replace_existing else group[0]._tinysql_insert_replace
+        sql = group[0]._tinysql_insert if not replace else group[0]._tinysql_insert_replace
         data_tuples = [prepare_data_tuple(context, item, tspec, lambda d, k: getattr(d, k)) for item in group]
         cur = context.con.cursor()
         cur.executemany(sql, data_tuples)
         context.con.commit()
 
 
-def insertmany_from_dict(context: DatabaseContext, data: list[Dict], tspec: TableSpec, replace_existing=True):
-    sql = sql_builder_insert(tspec, replace_existing)
+def insertmany_from_dict(context: DatabaseContext, data: list[Dict], tspec: TableSpec, replace=True):
+    sql = sql_builder_insert(tspec, replace)
     data_tuples = [prepare_data_tuple(context, item, tspec, lambda d, k: getattr(d, k)) for item in data]
     cur = context.con.cursor()
     cur.executemany(sql, data_tuples)
     context.con.commit()
 
 
-def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = None, replace_existing: bool = True):
+def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = None, replace: bool = True):
     if not len(data):
         return
 
     if hasattr(data[0], '_tinysql_tspec'):
-        insertmany_from_class(context, data, replace_existing)
+        insertmany_from_class(context, data, replace)
 
     elif isinstance(data[0], dict):
         if tspec is None:
             raise RuntimeError(f"TableSpec must be provided for dictionary")
-        insertmany_from_dict(context, data, tspec, replace_existing)
+        insertmany_from_dict(context, data, tspec, replace)
 
     else:
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
