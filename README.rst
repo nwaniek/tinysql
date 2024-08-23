@@ -63,7 +63,7 @@ A brief example could look as follows:
 .. code-block:: python
 
     from typing import NamedTuple
-    from tinysql import DatabaseContext, Equals, Or, In, select, db_table
+    from tinysql import setup_db, Equals, Or, In, select, db_table
 
     # this is an example class that is derived from NamedTuple and mapped to the
     # database. It contains spiking data from neural recordings for a particular
@@ -76,11 +76,11 @@ A brief example could look as follows:
         spike_times: np.ndarray
         comment: str
 
-    # Open the database. This will create the database if it does not exist. If
-    # a second argument is given to DatabaseContext, then tinysql will assume
-    # storage of BLOBs and ndarrays should happen outside the database, i.e. on
-    # disk
-    with DatabaseContext('database.db', '/path/to/external/storage') as context:
+    # The following will open an existing database, or create on if it does not
+    # exist yet.  If a second argument is given to setup_db, then tinysql will
+    # assume storage of BLOBs and ndarrays should happen outside the database,
+    # i.e. on disk or wherever the path points to.
+    with setup_db('database.db', '/path/to/external/storage') as context:
 
         # load some data from, preprocess, etc...
         # once you have SpikeData with your data, we can insert it
