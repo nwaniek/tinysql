@@ -486,7 +486,7 @@ def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = N
 
     elif isinstance(data[0], dict):
         if tspec is None:
-            raise RuntimeError(f"TableSpec must be provided for dictionary")
+            raise RuntimeError(f"TableSpec must be provided for list of dictionaries")
         insertmany_from_dict(context, data, tspec, replace)
 
     else:
