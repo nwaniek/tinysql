@@ -141,7 +141,7 @@ sqlite's autoinc in the `sqlite documentation <https://www.sqlite.org/autoinc.ht
     from tinysql import autoinc, db_table
 
     # to create an autoinc field, simply use tinysql's autoinc type
-    @db_table('FancyData', primary_key['id'])
+    @db_table('FancyData', primary_keys=['id'])
     class FancyData(NamedTuple):
         id : autoinc
         stuff: str
