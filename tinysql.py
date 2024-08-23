@@ -10,7 +10,7 @@ import pickle
 import numpy as np
 
 
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 
 
 TABLE_REGISTRY = {}
@@ -230,7 +230,7 @@ class DatabaseContext:
         self.insertmany_fn(self, data, tspec, replace)
 
     def select(self, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
-        self.select_fn(self, cls, condition, limit, offset)
+        yield from self.select_fn(self, cls, condition, limit, offset)
 
     def __enter__(self):
         self.init_tables()
@@ -271,7 +271,7 @@ def sql_builder_create_table(tspec: TableSpec) -> str:
 def sql_builder_insert(tspec: TableSpec, replace : bool = False) -> str:
     modifier = "or REPLACE" if replace else "" # "or IGNORE"
 
-    # filter out autoincrement fields (they will be updated by sqlite)
+    # filter out autoincrement fields (they will be set by sqlite)
     fields = []
     for fname, tmap in tspec.fields.__dict__.items():
         if TypeFlags.AUTOINC in tmap.flags:
@@ -360,9 +360,11 @@ def db_enum(tablename: str, descriptions: Dict[str, str] = {}, context: Database
     return decorator
 
 
-def get_tspec(cls: Type | str) -> TableSpec:
+def get_tspec(cls: Type | str, context: DatabaseContext | None = None) -> TableSpec:
+    registry = context.registry if context else TABLE_REGISTRY
+
     if isinstance(cls, str):
-        tentry = TABLE_REGISTRY.get(cls, None)
+        tentry = registry.get(cls, None)
         if tentry is not None:
             return tentry.tspec
         raise RuntimeError(f"Type not mapped to database: {cls}.")
@@ -371,10 +373,15 @@ def get_tspec(cls: Type | str) -> TableSpec:
         return cls._tinysql_tspec
 
     else:
-        tentry = TABLE_REGISTRY.get(cls.__name__, None)
+        tentry = registry.get(cls.__name__, None)
         if tentry is not None:
             return tentry.tspec
         raise RuntimeError(f"Type not mapped to database: {cls}.")
+
+
+def get_tablename(cls: Type | str, context: DatabaseContext | None = None) -> str:
+    tspec = get_tspec(cls, context)
+    return tspec.name
 
 
 def dump(context, tspec: TableSpec, fieldname: str, data, obj, get_fn: Callable) -> str:
@@ -417,7 +424,6 @@ def prepare_data_tuple(context: DatabaseContext, data, tspec: TableSpec, get_fn:
 
 def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_fn: Callable):
     data_tuple = prepare_data_tuple(context, data, tspec, get_fn)
-    # finally execute
     cur = context.con.cursor()
     cur.execute(sql, data_tuple)
     context.con.commit()
@@ -491,6 +497,38 @@ def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = N
 
     else:
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
+
+
+def update(context: DatabaseContext, cls: Type, updates, condition: Condition | None = None):
+    if not hasattr(cls, '_tinysql_tspec'):
+        raise TypeError("Type not mapped to database: {cls}")
+
+    if not len(updates):
+        return
+
+    tspec = cls._tinysql_tspec
+    sql = f"UPDATE {tspec.name} SET "
+    sql += ", ".join([f"{field} = {value}" for (field, value) in updates])
+    params = []
+    if condition is not None:
+        where, params = condition.build()
+        sql += f" WHERE {where}"
+
+    cur = context.con.cursor()
+    cur.execute(sql, params)
+    context.con.commit()
+
+
+def execute(context: DatabaseContext, sql: str, parameters, /):
+    cur = context.con.cursor()
+    cur.execute(sql, parameters)
+    context.con.commit()
+
+
+def executemany(context: DatabaseContext, sql: str, parameters, /):
+    cur = context.con.cursor()
+    cur.executemany(sql, parameters)
+    context.con.commit()
 
 
 def select(context: DatabaseContext, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):

@@ -92,14 +92,57 @@ def test_autoinc():
 
 
 def test_insertmany(context):
-    values = [AmazingValues(tinysql.autoinc(), "one", 1.0, np.ones((1,1))),
-              AmazingValues(tinysql.autoinc(), "two", 2.0, np.ones((2,2))),
-              AmazingValues(tinysql.autoinc(), "three", 3.0, np.ones((3,3)))]
+    values = [AmazingValues(gen_uuid(), "one", 1.0, np.ones((1,1))),
+              AmazingValues(gen_uuid(), "two", 2.0, np.ones((2,2))),
+              AmazingValues(gen_uuid(), "three", 3.0, np.ones((3,3)))]
     context.insertmany(values)
     sql = "SELECT * FROM AmazingValues"
     rows = context.con.execute(sql)
     for row in rows:
         print(row)
+
+
+@tinysql.db_table("Employee", primary_keys=['id'], context=context)
+class Employee(NamedTuple):
+    id: tinysql.autoinc
+    name: str
+    salary: float
+
+
+def test_update(context):
+    # first write some data to the database
+    context.insert(Employee(tinysql.autoinc(), "Alice",   1500.0))
+    context.insert(Employee(tinysql.autoinc(), "Bob",     1000.0))
+    context.insert(Employee(tinysql.autoinc(), "Eve",     1250.0))
+    context.insert(Employee(tinysql.autoinc(), "Charlie", 1400.0))
+    print("insert")
+    results = context.select(Employee)
+    for result in results:
+        print("  ", result)
+
+    # now we want to build an update, raising the salary for everyone who earns
+    # less than 1400 by a certain factor
+    tinysql.update(context, Employee, [('salary', 'salary * 1.1'), ('name', 'UPPER(name)')], tinysql.LessThan('salary', 1400.0))
+    print("update typed")
+    results = context.select(Employee)
+    for result in results:
+        print("  ", result)
+
+    # direct sql via execute
+    tablename = tinysql.get_tablename(Employee)
+    tinysql.execute(context, f"UPDATE {tablename} SET salary = salary * 1.1, name = lower(name) WHERE salary < ?", (1400.0, ))
+    print("update via execute")
+    results = context.select(Employee)
+    for result in results:
+        print("  ", result)
+
+    # direct sql via executemany
+    tablename = tinysql.get_tablename(Employee)
+    tinysql.executemany(context, f"UPDATE {tablename} SET salary = salary * 2.1, name = UPPER(name) WHERE id = ?", [(1,), (4,),])
+    print("update via executemany")
+    results = context.select(Employee)
+    for result in results:
+        print("  ", result)
 
 
 if __name__ == "__main__":
@@ -109,3 +152,4 @@ if __name__ == "__main__":
         test_enum(context)
         test_select(context)
         test_insertmany(context)
+        test_update(context)
