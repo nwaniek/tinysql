@@ -70,9 +70,21 @@ def test_autoinc():
     print(sql)
 
 
+def test_insertmany(context):
+    values = [AmazingValues(tinysql.autoinc(), "one", 1.0, np.ones((1,1))),
+              AmazingValues(tinysql.autoinc(), "two", 2.0, np.ones((2,2))),
+              AmazingValues(tinysql.autoinc(), "three", 3.0, np.ones((3,3)))]
+    context.insertmany(values)
+    sql = "SELECT * FROM AmazingValues"
+    rows = context.con.execute(sql)
+    for row in rows:
+        print(row)
+
+
 if __name__ == "__main__":
     with context:
         test_autoinc()
         test_insert(context)
         test_enum(context)
         test_select(context)
+        test_insertmany(context)
