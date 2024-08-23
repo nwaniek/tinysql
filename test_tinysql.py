@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import NamedTuple
 import tinysql
@@ -13,10 +14,20 @@ def gen_uuid():
 
 @tinysql.db_table("AmazingValues", primary_keys=["id"], context=context)
 class AmazingValues(NamedTuple):
-    id:     tinysql.autoinc
+    id:     str
     value0: str
     value1: float
     value2: np.ndarray
+
+
+@tinysql.db_table("DataClassTest", primary_keys=["id"], context=context)
+@dataclass
+class DataClassTest:
+    id:     str
+    value0: str
+    value1: float
+    value2: np.ndarray
+
 
 
 @tinysql.db_enum("MyEnum", descriptions={'One': 'First field of MyEnum', 'Two': 'Second field of MyEnum'}, context=context)
@@ -29,8 +40,11 @@ def test_insert(context):
     print("Table 'AmazingValues' exists:", tinysql.table_exists(context.con, "AmazingValues"))
 
     # insert via object
-    values = AmazingValues(tinysql.autoinc(), "hello, world!", 123.12, np.ones((4, 4)))
+    values = AmazingValues(gen_uuid(), "hello, world!", 123.12, np.ones((4, 4)))
     context.insert(values)
+
+    # testing the dataclass
+    context.insert(DataClassTest(gen_uuid(), "hello, world, this is a dataclass!", 123.12, np.ones((4, 4))))
 
     # insert as a dict with corresponding tablespec
     values = {'id': gen_uuid(),
@@ -44,6 +58,13 @@ def test_insert(context):
     rows = context.con.execute(sql)
     for row in rows:
         print(row)
+
+    # print everything in the table
+    sql = "SELECT * FROM DataClassTest"
+    rows = context.con.execute(sql)
+    for row in rows:
+        print(row)
+
 
 
 def test_enum(context):

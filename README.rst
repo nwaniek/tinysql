@@ -156,6 +156,18 @@ sqlite's autoinc in the `sqlite documentation <https://www.sqlite.org/autoinc.ht
     # integer back.
     my_data = FancyData(autoinc(), 'really amazing data!')
 
+There's another subtle issue with autoinc, namely when using tinysql with an
+external storage for BLOBs. At the time of writing the an entry into the
+database, or more precisely before writing the data to the table, the value of
+the autoinc field might not yet be determined. Yet, the primary key(s) of a
+mapped/registered class will be used in the production of the filename where
+the ndarray will be stored.
+
+As a general recommendation: don't mix autoinc fields with BLOB fields in one
+class. Rather, use another form of primary key, something that can be determined
+at runtime before writing things to the database, such as a SHA1 over your data,
+or a time-based UUID.
+
 
 Working with several databases
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -38,7 +38,7 @@ class autoinc(int):
         return obj
 
     def __repr__(self):
-        return f"AutoInc({super().__repr__()})"
+        return f"{super().__repr__()}"
 
 
 TYPE_MAPPING = {
