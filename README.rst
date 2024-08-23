@@ -59,7 +59,6 @@ Usage
 To use `tinysql`, you define your tables and interact with your database using minimalistic ORM methods.
 A brief example could look as follows:
 
-
 .. code-block:: python
 
     from typing import NamedTuple
@@ -103,6 +102,9 @@ A brief example could look as follows:
         for result in results:
             print(result)
 
+Enums
+~~~~~
+
 Of course, we also often use all kinds of enums to identify stuff or flag things.
 And, obviously, you should map your enums to the database, too.
 This is why `tinysql` supports all standard python enum types.
@@ -128,6 +130,8 @@ This is why `tinysql` supports all standard python enum types.
         Two: auto()
         Three: auto()
 
+Autoincrement
+~~~~~~~~~~~~~
 
 Sometimes there's a need for an autoincrement field. tinysql supports this, but
 be aware that sqlite has special treatment for autoincrement. That is, an
@@ -152,6 +156,95 @@ sqlite's autoinc in the `sqlite documentation <https://www.sqlite.org/autoinc.ht
     # integer back.
     my_data = FancyData(autoinc(), 'really amazing data!')
 
+
+Working with several databases
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Other times, you might want to work with several databases at the same time.
+While this is possible with `tinysql`, there are some limitations you need to be
+aware of. To understand these limitations, it's necessary to look under the hood
+of how `tinysql` manages tables.
+
+When you use the `db_enum` or `db_table` decorator as in the examples above,
+then `tinysql` will store an entry into its 'global table registry'. You can
+inspect this registry if you want at runtime:
+
+.. code-block:: python
+
+    from typing import NamedTuple
+    import tinysql
+
+    @db_table(...) # map/register your class
+    class MyData(NamedTuple):
+        # ...
+
+    # list all tables globally known to tinysql
+    print(tinysql.TABLE_REGISTRY)
+
+
+When you create/open a connection to a database using `setup_db`, then the
+DatabaseContext that is returned from the function call will inherit this global
+registry.
+
+To handle several databases, you need to register a class against a specific
+context. You also need to initialize the tables by either using the context as a
+context manager, or explicitly invoking its `init_tables` method. Here's an
+example for all of this:
+
+.. code-block:: python
+
+    from typing import NamedTuple
+    from tinysql import db_table, DatabaseContext
+
+    # create two instances of DatabaseContext, each pointing to a particular
+    # sqlite database.
+    context1 = DatabaseContext('db1.sqlite')
+    context2 = DatabaseContext('db2.sqlite')
+
+    # register a table against a specific context.
+    @db_table("StringData", context=context1)
+    class StringData:
+        data: str
+
+    # register another table against the other context
+    @db_table("FloatData", context=context2)
+    class FloatData:
+        data: float
+
+    # at this point, StringData will be only known to context1, while
+    # FloatData will only be known to context2. We need to make sure that the
+    # tables get initialized. This can be done either via a context manager, or
+    # explicitly:
+
+    with context1:
+        # do something with the context, like adding string data to this
+        # database
+        context1.insert(StringData("wow!"))
+
+    # Note that the connection to the database will be closed once the context
+    # manager goes out of context. That is, any further operation against the
+    # database with context1 will now fail
+    context1.insert(StringData("this will fail"))
+
+    # the alternative is to explicitly initialize the tables.
+    context2.init_tables()
+    # and then use it
+    context2.insert(FloatData(42.0))
+    # make sure to close the context when you're done. This will close the
+    # connection to the database
+    context2.close()
+
+
+Extending `tinysql` with other types
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you wish to extend `tinysql` with other types than the standard types that it
+already supports, autoinc, np.ndarray, and other BLOBs, then best have a look at
+`tinysql`'s `TYPE_MAPPING` variable. This is simply a dict which contains a map
+from a type that you want to use in a type annotation to the sqlite database
+type and some additional flag. You can either inject your own type mappings into
+`TYPE_MAPPING`, or change it directly there (remember, tinysql is as basic as it
+gets, and a 'single file package').
 
 
 Contributing
