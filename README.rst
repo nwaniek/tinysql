@@ -76,8 +76,8 @@ A brief example could look as follows:
         spike_times: np.ndarray
         comment: str
 
-    # The following will open an existing database, or create on if it does not
-    # exist yet.  If a second argument is given to setup_db, then tinysql will
+    # The following will open an existing database, or create one if it does not
+    # exist yet. If a second argument is given to setup_db, then tinysql will
     # assume storage of BLOBs and ndarrays should happen outside the database,
     # i.e. on disk or wherever the path points to.
     with setup_db('database.db', '/path/to/external/storage') as context:
@@ -129,6 +129,30 @@ This is why `tinysql` supports all standard python enum types.
         Three: auto()
 
 
+Sometimes there's a need for an autoincrement field. tinysql supports this, but
+be aware that sqlite has special treatment for autoincrement. That is, an
+autoinc field must be a primary key, and there can be only one primary key in
+the table. If you attempt to create tinysql-mapped tables with autoinc fields
+and more than one primary key, tinysql will raise an exception! Read more about
+sqlite's autoinc in the `sqlite documentation <https://www.sqlite.org/autoinc.html>`_.
+
+.. code-block:: python
+
+    from tinysql import autoinc, db_table
+
+    # to create an autoinc field, simply use tinysql's autoinc type
+    @db_table('FancyData', primary_key['id'])
+    class FancyData(NamedTuple):
+        id : autoinc
+        stuff: str
+
+    # when creating a new instance of FancyData, you need to pass an instance of
+    # autoinc to FancyData. tinysql will filter out autoinc fields when
+    # inserting data into the database. when loading data, you'll get a regular
+    # integer back.
+    my_data = FancyData(autoinc(), 'really amazing data!')
+
+
 
 Contributing
 ------------
@@ -139,5 +163,5 @@ If you have suggestions, bug reports, or want to contribute code, please open an
 License
 -------
 `tinysql` is licensed under the MIT License.
-See the `LICENSE <LICENSE>`_ file file for details.
+See the `LICENSE <LICENSE>`_ file for details.
 
