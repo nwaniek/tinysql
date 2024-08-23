@@ -184,18 +184,40 @@ class Or(Condition):
 
 
 class DatabaseContext:
-    def __init__(self, db_path: Path, table_storage_root: Path | None):
-        self.registry             = {}
+    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, registry: Dict | None = None):
+        # sanitize paths
+        db_path = Path(db_path) if isinstance(db_path, str) else db_path
+        table_storage_root = Path(table_storage_root) if isinstance(table_storage_root, str) else table_storage_root
+
+        self.registry             = registry or {}
         self.db_path              = db_path
         self.table_storage_root   = table_storage_root
         self.use_external_storage = table_storage_root is not None
         if not self.use_external_storage:
             sqlite3.register_adapter(np.ndarray, adapt_array)
             sqlite3.register_converter("ndarray", convert_array)
-        self.con = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.con                  = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.insert_fn            = insert
+        self.select_fn            = select
+        self.tables_initialized   = False
 
-        self.insert_fn = insert
-        self.select_fn = select
+    def init_tables(self):
+        if self.tables_initialized:
+            return
+        cur = self.con.cursor()
+        for tabledef in self.registry.values():
+            tspec   = tabledef.tspec
+            init_fn = tabledef.init_fn
+            if table_exists(self.con, tspec.name):
+                continue
+
+            sql = sql_builder_create_table(tspec)
+            cur.execute(sql)
+            self.con.commit()
+            if init_fn is None:
+                continue
+            init_fn(self.con)
+        self.tables_initialized = True
 
     def close(self):
         self.con.close()
@@ -207,6 +229,7 @@ class DatabaseContext:
         self.select_fn(self, cls, condition, limit, offset)
 
     def __enter__(self):
+        self.init_tables()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -459,23 +482,7 @@ def convert_array(text) -> np.ndarray:
 
 
 def setup_db(db_path: Path | str, table_storage_root: Path | str | None):
-    db_path = Path(db_path) if isinstance(db_path, str) else db_path
-    table_storage_root = Path(table_storage_root) if isinstance(table_storage_root, str) else table_storage_root
-
-    context = DatabaseContext(db_path, table_storage_root)
-    cur = context.con.cursor()
-    for tabledef in TABLE_REGISTRY.values():
-        tspec   = tabledef.tspec
-        init_fn = tabledef.init_fn
-        if table_exists(context.con, tspec.name):
-            continue
-
-        sql = sql_builder_create_table(tspec)
-        cur.execute(sql)
-        context.con.commit()
-        if init_fn is None:
-            continue
-        init_fn(context.con)
-
+    # this will use the global table registry, and also init the tables
+    context = DatabaseContext(db_path, table_storage_root, TABLE_REGISTRY)
+    context.init_tables()
     return context
-

@@ -6,10 +6,12 @@ import tinysql
 import numpy as np
 import uuid
 
+context = tinysql.DatabaseContext('test.sqlite', 'test_storage')
+
 def gen_uuid():
     return uuid.uuid4().hex
 
-@tinysql.db_table("AmazingValues", primary_keys=["id"])
+@tinysql.db_table("AmazingValues", primary_keys=["id"], context=context)
 class AmazingValues(NamedTuple):
     id:     tinysql.autoinc
     value0: str
@@ -17,7 +19,7 @@ class AmazingValues(NamedTuple):
     value2: np.ndarray
 
 
-@tinysql.db_enum("MyEnum", descriptions={'One': 'First field of MyEnum', 'Two': 'Second field of MyEnum'})
+@tinysql.db_enum("MyEnum", descriptions={'One': 'First field of MyEnum', 'Two': 'Second field of MyEnum'}, context=context)
 class MyEnum(Enum):
     One = "one"
     Two = "two"
@@ -58,7 +60,6 @@ def test_select(context):
         print(obj)
 
 
-# @tinysql.db_table(
 
 def test_autoinc():
     ts = tinysql.TableSpec("AutoIncTable")
@@ -68,8 +69,9 @@ def test_autoinc():
     sql = tinysql.sql_builder_create_table(ts)
     print(sql)
 
+
 if __name__ == "__main__":
-    with tinysql.setup_db('test.sqlite', 'test_storage') as context:
+    with context:
         test_autoinc()
         test_insert(context)
         test_enum(context)
