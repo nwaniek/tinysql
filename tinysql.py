@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from itertools import groupby
 from enum import Flag, auto
 from pathlib import Path
 from types import SimpleNamespace
