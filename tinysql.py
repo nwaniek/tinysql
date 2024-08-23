@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from enum import Flag, auto
 from pathlib import Path
 from types import SimpleNamespace
 from typing import NamedTuple, Tuple, Callable, List, Dict, Any, get_type_hints, Type
@@ -15,27 +16,51 @@ __version__ = '0.2.2'
 TABLE_REGISTRY = {}
 
 
+class TypeFlags(Flag):
+    NONE    = auto()
+    BLOB    = auto()
+    AUTOINC = auto()
+
+
 class TypeEntry(NamedTuple):
     sql_type: str
-    is_blob : bool
+    flags   : TypeFlags
+
+
+class autoinc(int):
+    def __new__(cls, value=None):
+        if value is None:
+            obj = super().__new__(cls, 0)
+        elif isinstance(value, int):
+            obj = super().__new__(cls, value)
+        else:
+            raise TypeError(f"AutoInc must be an integer or None, got {type(value)}")
+        return obj
+
+    def __repr__(self):
+        return f"AutoInc({super().__repr__()})"
 
 
 TYPE_MAPPING = {
     # standard types
-    str:        TypeEntry('TEXT',    False),
-    int:        TypeEntry('INTEGER', False),
-    float:      TypeEntry('REAL',    False),
+    str:        TypeEntry('TEXT',    TypeFlags.NONE),
+    int:        TypeEntry('INTEGER', TypeFlags.NONE),
+    float:      TypeEntry('REAL',    TypeFlags.NONE),
 
     # BOOLEAN will effectively be mapped to NUMERIC due to type affinity,
     # because sqlite does not have a native BOOL type (see
     # https://www.sqlite.org/datatype3.html for more details)
-    bool:       TypeEntry('BOOLEAN', False),
+    bool:       TypeEntry('BOOLEAN', TypeFlags.NONE),
 
     # special and custom types that are considered blobs
-    bytes:      TypeEntry('BLOB',    True),
-    bytearray:  TypeEntry('BLOB',    True),
-    memoryview: TypeEntry('BLOB',    True),
-    np.ndarray: TypeEntry('ndarray', True),
+    bytes:      TypeEntry('BLOB',    TypeFlags.BLOB),
+    bytearray:  TypeEntry('BLOB',    TypeFlags.BLOB),
+    memoryview: TypeEntry('BLOB',    TypeFlags.BLOB),
+    np.ndarray: TypeEntry('ndarray', TypeFlags.BLOB),
+
+    # special types supported by tinysql and mapped to appropriate sqlite
+    # representations
+    autoinc:    TypeEntry("INTEGER", TypeFlags.AUTOINC),
 }
 
 
@@ -189,23 +214,48 @@ class DatabaseContext:
 
 
 def sql_builder_create_table(tspec: TableSpec) -> str:
+    primary_keys = tspec.primary_keys or []
+    # sqlite allows only one autoincrement field, and this is effectively also
+    # the primary key. enforce this behavior by checking that there's only one
+    # pk that is also autoinc (if there's autoinc)
+    autoinc_field = None
+    has_autoinc = False
+    for fname, tmap in tspec.fields.__dict__.items():
+        has_autoinc = TypeFlags.AUTOINC in tmap.flags
+        if has_autoinc:
+            autoinc_field = fname
+            break
+    if has_autoinc:
+        if autoinc_field not in tspec.primary_keys:
+            raise ValueError(f"field {autoinc_field} is declared AUTOINCREMENT but not a PRIMARY KEY, which is not supported by sqlite.")
+        if len(tspec.primary_keys) > 1:
+            raise ValueError(f"AUTOINCREMENT not supported on composite PRIMARY KEYs in sqlite. Affected field: {autoinc_field}.")
+
     sql = f"CREATE TABLE {tspec.name} ("
-    sql += ", ".join(f"{fname} {tmap.sql_type}" for fname, tmap in tspec.fields.__dict__.items())
+    sql += ", ".join(f"{fname} {tmap.sql_type}{' PRIMARY KEY' if fname in primary_keys and len(primary_keys) <= 1 else ''}{' AUTOINCREMENT' if TypeFlags.AUTOINC in tmap.flags else ''}" for fname, tmap in tspec.fields.__dict__.items())
     if tspec.foreign_keys is not None and len(tspec.foreign_keys) > 0:
         sql += ", " + ", ".join("FOREIGN KEY ({}) REFERENCES {}".format(fk[0], fk[1]) for fk in tspec.foreign_keys)
-    if tspec.primary_keys is not None and len(tspec.primary_keys) > 0:
-        sql += ", PRIMARY KEY (" + ", ".join(tspec.primary_keys) + ")"
+    if primary_keys is not None and len(primary_keys) > 1:
+        sql += ", PRIMARY KEY (" + ", ".join(primary_keys) + ")"
     sql += ");"
     return sql
 
 
 def sql_builder_insert(tspec: TableSpec, replace_existing : bool = False) -> str:
     modifier = "or REPLACE" if replace_existing else "" # "or IGNORE"
+
+    # filter out autoincrement fields (they will be updated by sqlite)
+    fields = []
+    for fname, tmap in tspec.fields.__dict__.items():
+        if TypeFlags.AUTOINC in tmap.flags:
+            continue
+        fields.append(fname)
+
     sql = f"INSERT {modifier} INTO {tspec.name}"
     sql += "("
-    sql += ", ".join(key for key in tspec.fields.__dict__.keys())
+    sql += ", ".join(f for f in fields)
     sql += ") VALUES ("
-    sql += ", ".join("?" for _ in range(len(tspec.fields.__dict__)))
+    sql += ", ".join("?" for _ in range(len(fields)))
     sql += ");"
     return sql
 
@@ -329,7 +379,10 @@ def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_
 
     # build the data for the sqlite table
     for fname, ftype in tspec.fields.__dict__.items():
-        if ftype.is_blob and context.use_external_storage:
+        if TypeFlags.AUTOINC in ftype:
+            continue
+
+        if TypeFlags.BLOB in ftype.flags and context.use_external_storage:
             fpath = dump(context, tspec, fname, data, get_fn(data, fname), get_fn)
             _data = _data + (fpath, )
         else:

@@ -11,7 +11,7 @@ def gen_uuid():
 
 @tinysql.db_table("AmazingValues", primary_keys=["id"])
 class AmazingValues(NamedTuple):
-    id:     str
+    id:     tinysql.autoinc
     value0: str
     value1: float
     value2: np.ndarray
@@ -27,7 +27,7 @@ def test_insert(context):
     print("Table 'AmazingValues' exists:", tinysql.table_exists(context.con, "AmazingValues"))
 
     # insert via object
-    values = AmazingValues(gen_uuid(), "hello, world!", 123.12, np.ones((4, 4)))
+    values = AmazingValues(tinysql.autoinc(), "hello, world!", 123.12, np.ones((4, 4)))
     context.insert(values)
 
     # insert as a dict with corresponding tablespec
@@ -58,8 +58,19 @@ def test_select(context):
         print(obj)
 
 
+# @tinysql.db_table(
+
+def test_autoinc():
+    ts = tinysql.TableSpec("AutoIncTable")
+    ts.fields.id0 = tinysql.TYPE_MAPPING[tinysql.autoinc]
+    ts.fields.id1 = tinysql.TYPE_MAPPING[int]
+    ts.primary_keys = ['id0']
+    sql = tinysql.sql_builder_create_table(ts)
+    print(sql)
+
 if __name__ == "__main__":
     with tinysql.setup_db('test.sqlite', 'test_storage') as context:
+        test_autoinc()
         test_insert(context)
         test_enum(context)
         test_select(context)
