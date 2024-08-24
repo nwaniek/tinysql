@@ -29,6 +29,11 @@ class DataClassTest:
     value2: np.ndarray
 
 
+@tinysql.db_table("DCWithMethods", primary_keys=["pk1", "pk2"])
+@dataclass
+class DCWithMethods:
+    pass
+
 
 @tinysql.db_enum("MyEnum", descriptions={'One': 'First field of MyEnum', 'Two': 'Second field of MyEnum'}, context=context)
 class MyEnum(Enum):
