@@ -3,16 +3,17 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import NamedTuple
-import tinysql
+import time
 import numpy as np
 import uuid
+import tinysql
 
-context = tinysql.DatabaseContext('test.sqlite', 'test_storage')
+
 
 def gen_uuid():
     return uuid.uuid4().hex
 
-@tinysql.db_table("AmazingValues", primary_keys=["id"], context=context)
+@tinysql.db_table("AmazingValues", primary_keys=["id"])
 class AmazingValues(NamedTuple):
     id:     str
     value0: str
@@ -20,7 +21,7 @@ class AmazingValues(NamedTuple):
     value2: np.ndarray
 
 
-@tinysql.db_table("DataClassTest", primary_keys=["id"], context=context)
+@tinysql.db_table("DataClassTest", primary_keys=["id"])
 @dataclass
 class DataClassTest:
     id:     str
@@ -29,13 +30,7 @@ class DataClassTest:
     value2: np.ndarray
 
 
-@tinysql.db_table("DCWithMethods", primary_keys=["pk1", "pk2"])
-@dataclass
-class DCWithMethods:
-    pass
-
-
-@tinysql.db_enum("MyEnum", descriptions={'One': 'First field of MyEnum', 'Two': 'Second field of MyEnum'}, context=context)
+@tinysql.db_enum("MyEnum", descriptions={'One': 'First field of MyEnum', 'Two': 'Second field of MyEnum'})
 class MyEnum(Enum):
     One = "one"
     Two = "two"
@@ -107,7 +102,7 @@ def test_insertmany(context):
         print(row)
 
 
-@tinysql.db_table("Employee", primary_keys=['id'], context=context)
+@tinysql.db_table("Employee", primary_keys=['id'])
 class Employee(NamedTuple):
     id: tinysql.autoinc
     name: str
@@ -150,7 +145,35 @@ def test_update(context):
         print("  ", result)
 
 
+@tinysql.db_table("DCWithMethods", primary_keys=["pk1", "pk2"])
+@dataclass
+class DCWithMethods:
+    pk1: int
+    pk2: int
+
+    def __init__(self):
+        # simulate a split primary key by splitting a time value into its parts
+        # before and after the comma
+        value = time.time()
+        self.pk1 = int(value)
+        self.pk2 = int((value - self.pk1) * 1_000_000)
+
+    def to_timestr(self):
+        value = float(self.pk1) + float(self.pk2) / 1_000_000.0
+        tstruct = time.localtime(value)
+        timestr = time.strftime("%Y-%m-%d %H:%M:%S", tstruct)
+        return timestr
+
+
+def test_dcmethods(context):
+    dcm1 = DCWithMethods()
+    dcm2 = DCWithMethods()
+    context.insertmany([dcm1, dcm2])
+    print(dcm1.pk2, dcm1.to_timestr(), dcm2.pk2, dcm2.to_timestr())
+
+
 if __name__ == "__main__":
+    context = tinysql.DatabaseContext('test.sqlite', 'test_storage')
     with context:
         test_autoinc()
         test_insert(context)
@@ -158,3 +181,4 @@ if __name__ == "__main__":
         test_select(context)
         test_insertmany(context)
         test_update(context)
+        test_dcmethods(context)

@@ -184,12 +184,13 @@ class Or(Condition):
 
 
 class DatabaseContext:
-    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, registry: Dict | None = None):
+    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, use_global_registry: bool = True):
         # sanitize paths
         db_path = Path(db_path) if isinstance(db_path, str) else db_path
         table_storage_root = Path(table_storage_root) if isinstance(table_storage_root, str) else table_storage_root
 
-        self.registry             = registry or {}
+        self.use_global_registry  = use_global_registry
+        self.registry             = TABLE_REGISTRY if use_global_registry else {}
         self.db_path              = db_path
         self.table_storage_root   = table_storage_root
         self.use_external_storage = table_storage_root is not None
@@ -413,7 +414,6 @@ def prepare_data_tuple(context: DatabaseContext, data, tspec: TableSpec, get_fn:
     for fname, ftype in tspec.fields.__dict__.items():
         if TypeFlags.AUTOINC in ftype:
             continue
-
         if TypeFlags.BLOB in ftype.flags and context.use_external_storage:
             fpath = dump(context, tspec, fname, data, get_fn(data, fname), get_fn)
             data_tuple = data_tuple + (fpath, )
@@ -574,6 +574,6 @@ def convert_array(text) -> np.ndarray:
 
 def setup_db(db_path: Path | str, table_storage_root: Path | str | None):
     # this will use the global table registry, and also init the tables
-    context = DatabaseContext(db_path, table_storage_root, TABLE_REGISTRY)
+    context = DatabaseContext(db_path, table_storage_root, use_global_table_registry=True)
     context.init_tables()
     return context

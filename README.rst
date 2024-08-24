@@ -209,9 +209,13 @@ example for all of this:
     from tinysql import db_table, DatabaseContext
 
     # create two instances of DatabaseContext, each pointing to a particular
-    # sqlite database.
-    context1 = DatabaseContext('db1.sqlite')
-    context2 = DatabaseContext('db2.sqlite')
+    # sqlite database, and telling them to *not* use the global registry.
+    # If you wonder why tinysql defaults to a global registry? The reason is
+    # that, at least in my use cases, I more often work with databases with
+    # the same tables, or with just a single database connection. Using the
+    # global registry by default improves terseness slightly.
+    context1 = DatabaseContext('db1.sqlite', use_global_registry=False)
+    context2 = DatabaseContext('db2.sqlite', use_global_registry=False)
 
     # register a table against a specific context.
     @db_table("StringData", context=context1)
