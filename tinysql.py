@@ -22,7 +22,7 @@ class TypeFlags(Flag):
     AUTOINC = auto()
 
 
-class TypeEntry(NamedTuple):
+class TypeMap(NamedTuple):
     sql_type: str
     flags   : TypeFlags
 
@@ -43,24 +43,24 @@ class autoinc(int):
 
 TYPE_MAPPING = {
     # standard types
-    str:        TypeEntry('TEXT',    TypeFlags.NONE),
-    int:        TypeEntry('INTEGER', TypeFlags.NONE),
-    float:      TypeEntry('REAL',    TypeFlags.NONE),
+    str:        TypeMap('TEXT',    TypeFlags.NONE),
+    int:        TypeMap('INTEGER', TypeFlags.NONE),
+    float:      TypeMap('REAL',    TypeFlags.NONE),
 
     # BOOLEAN will effectively be mapped to NUMERIC due to type affinity,
     # because sqlite does not have a native BOOL type (see
     # https://www.sqlite.org/datatype3.html for more details)
-    bool:       TypeEntry('BOOLEAN', TypeFlags.NONE),
+    bool:       TypeMap('BOOLEAN', TypeFlags.NONE),
 
     # special and custom types that are considered blobs
-    bytes:      TypeEntry('BLOB',    TypeFlags.BLOB),
-    bytearray:  TypeEntry('BLOB',    TypeFlags.BLOB),
-    memoryview: TypeEntry('BLOB',    TypeFlags.BLOB),
-    np.ndarray: TypeEntry('ndarray', TypeFlags.BLOB),
+    bytes:      TypeMap('BLOB',    TypeFlags.BLOB),
+    bytearray:  TypeMap('BLOB',    TypeFlags.BLOB),
+    memoryview: TypeMap('BLOB',    TypeFlags.BLOB),
+    np.ndarray: TypeMap('ndarray', TypeFlags.BLOB),
 
     # special types supported by tinysql and mapped to appropriate sqlite
     # representations
-    autoinc:    TypeEntry("INTEGER", TypeFlags.AUTOINC),
+    autoinc:    TypeMap("INTEGER", TypeFlags.AUTOINC),
 }
 
 
