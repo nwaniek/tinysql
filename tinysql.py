@@ -583,6 +583,6 @@ def convert_array(text) -> np.ndarray:
 
 def setup_db(db_path: Path | str, table_storage_root: Path | str | None):
     # this will use the global table registry, and also init the tables
-    context = DatabaseContext(db_path, table_storage_root, use_global_table_registry=True)
+    context = DatabaseContext(db_path, table_storage_root, use_global_registry=True)
     context.init_tables()
     return context
