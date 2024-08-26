@@ -255,7 +255,7 @@ def sql_builder_create_table(tspec: TableSpec) -> str:
             break
     if has_autoinc:
         if autoinc_field not in tspec.primary_keys:
-            raise ValueError(f"field {autoinc_field} is declared AUTOINCREMENT but not a PRIMARY KEY, which is not supported by sqlite.")
+            raise ValueError(f"Field {autoinc_field} is declared AUTOINCREMENT, but not a PRIMARY KEY. This is not supported by sqlite.")
         if len(tspec.primary_keys) > 1:
             raise ValueError(f"AUTOINCREMENT not supported on composite PRIMARY KEYs in sqlite. Affected field: {autoinc_field}.")
 
