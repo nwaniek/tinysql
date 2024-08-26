@@ -183,6 +183,15 @@ class Or(Condition):
         return " OR ".join(clauses), parameters
 
 
+class Not(Condition):
+    def __init__(self, condition: Condition):
+        self.condition = condition
+
+    def build(self) -> Tuple[str, List[Any]]:
+        clause, params = self.condition.build()
+        return " NOT (" + clause + ")", params
+
+
 class DatabaseContext:
     def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, use_global_registry: bool = True):
         # sanitize paths

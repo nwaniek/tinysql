@@ -76,7 +76,7 @@ def test_enum(context):
 
 
 def test_select(context):
-    results = tinysql.select(context, AmazingValues, tinysql.GreaterThan('value1', 70.0))
+    results = tinysql.select(context, AmazingValues, tinysql.Not(tinysql.GreaterThan('value1', 70.0)))
     for obj in results:
         print(obj)
 
