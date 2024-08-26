@@ -81,6 +81,15 @@ def test_select(context):
         print(obj)
 
 
+def test_select_sql(context):
+    results = tinysql.select(context, AmazingValues, "WHERE value1 >= 70.0 AND value1 < 150.0")
+    for obj in results:
+        print(obj)
+
+    results = tinysql.select(context, AmazingValues, "WHERE value1 >= ? AND value1 < ?", (70.0, 120.0, ))
+    for obj in results:
+        print(obj)
+
 
 def test_autoinc():
     ts = tinysql.TableSpec("AutoIncTable")
@@ -179,6 +188,7 @@ if __name__ == "__main__":
         test_insert(context)
         test_enum(context)
         test_select(context)
+        test_select_sql(context)
         test_insertmany(context)
         test_update(context)
         test_dcmethods(context)

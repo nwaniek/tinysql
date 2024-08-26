@@ -130,6 +130,82 @@ This is why `tinysql` supports all standard python enum types.
         Two: auto()
         Three: auto()
 
+
+Conditions
+~~~~~~~~~~
+
+Despite not really being a full-fledged ORM, `tinysql` provides a means to write
+conditionals that are translated to SQL. In the spirit of `tinysql`, they are
+kept as minimalistic as possible and as close to SQL as it gets:
+
+.. code-block:: python
+
+    from tinysql import select, Not, GreaterThan
+
+    results = select(context, AmazingValues, Not(GreaterThan('value1', 70.0)))
+    for obj in results:
+        print(obj)
+
+`tinysql` currently provides Equals, NotEquals, GreaterThan, LessThan, Between,
+Like, In, And, Or, and Not. You can nest them arbitrarily and thereby build
+complex expressions, but then again you might just simply drop into SQL to
+achieve this, as will be shown next.
+
+
+Direct SQL passthrough
+~~~~~~~~~~~~~~~~~~~~~~
+
+`tinysql` does not hide the connection to the sqlite database it is connected to
+(after using it as a context manager or runnning `init_tables`). It provides
+some methods that you can use to fill specific objects like `select` where, you
+can pass an SQL expression, and it will fill a particular class with the
+results:
+
+.. code-block:: python
+
+    results = select(context, AmazingValues, "WHERE value1 >= ? AND value1 < ?", (70.0, 120.0, ))
+    for obj in results:
+        print(obj)
+
+If you use select, or any other SQL passthrough method, it is up to you to make
+sure that the result from the database can be accepted by the constructor of the
+class that you pass in. That is, under the hood, `tinysql` merely forwards the
+results via `cls(*row)`.
+
+It is also possible to directly write SQL statements and execute them as you
+usually would with sqlite:
+
+.. code-block:: python
+
+    with setup_db('mydatabase.sqlite') as context:
+        cur = context.con.cursor()
+        rows = cur.execute("SELECT * FOM AmazingValues")
+        for row in rows:
+            print(row)
+
+
+Moreover, `tinysql` provides some methods like `execute` and `executemany`,
+that directly pass through to the connection and commits the statement, to save
+you a few keystrokes:
+
+
+.. code-block:: python
+
+    with setup_db('mydatabase.sqlite') as context:
+        context.executemany("INSERT INTO MyTable VALUES (?)", [("one",), ("two",)])
+
+which is equivalent to
+
+.. code-block:: python
+
+    with setup_db('mydatabase.sqlite') as context:
+        cur = context.con.cursor()
+        cur.executemany("INSERT INTO MyTable VALUES (?)", [("one",), ("two",)])
+        context.con.commit()
+
+Does it save much? No. Is ist convenient? Yes.
+
+
 Autoincrement
 ~~~~~~~~~~~~~
 

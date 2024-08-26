@@ -239,8 +239,8 @@ class DatabaseContext:
     def insertmany(self, data, tspec: TableSpec | None = None, replace=True):
         self.insertmany_fn(self, data, tspec, replace)
 
-    def select(self, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
-        yield from self.select_fn(self, cls, condition, limit, offset)
+    def select(self, cls: Type, *params, **kwargs):
+        yield from self.select_fn(self, cls, *params, **kwargs)
 
     def __enter__(self):
         self.init_tables()
@@ -540,7 +540,18 @@ def executemany(context: DatabaseContext, sql: str, parameters, /):
     context.con.commit()
 
 
-def select(context: DatabaseContext, cls: Type, condition: Condition | None = None, limit: int | None = None, offset: int | None = None):
+def select_base_impl(context: DatabaseContext, cls: Type, sql: str, params = (), limit: int | None = None, offset: int | None = None):
+    if limit is not None:
+        sql += f" LIMIT {limit}"
+        if offset is not None:
+            sql += f" OFFSET {offset}"
+
+    cur = context.con.cursor()
+    for row in cur.execute(sql, params):
+        yield cls(*row)
+
+
+def select_from_condition(context: DatabaseContext, cls: Type, condition: Condition | None = None, **kwargs):
     if not hasattr(cls, '_tinysql_select'):
         raise TypeError("Type not mapped to database: {cls}")
 
@@ -550,14 +561,34 @@ def select(context: DatabaseContext, cls: Type, condition: Condition | None = No
         where, params = condition.build()
         sql += f" WHERE {where}"
 
-    if limit is not None:
-        sql += f" LIMIT {limit}"
-        if offset is not None:
-            sql += f" OFFSET {offset}"
+    yield from select_base_impl(context, cls, sql, params, **kwargs)
 
-    cur = context.con.cursor()
-    for row in cur.execute(sql, params):
-        yield cls(*row)
+
+def select_from_sql(context: DatabaseContext, cls: Type, where: str, params, **kwargs):
+    if not hasattr(cls, '_tinysql_select'):
+        raise TypeError("Type not mapped to database: {cls}")
+
+    sql = cls._tinysql_select
+    sql += " " + where
+    yield from select_base_impl(context, cls, sql, params, **kwargs)
+
+
+def select(context: DatabaseContext, cls: Type, *args, **kwargs):
+    if len(args) > 2:
+        raise TypeError("select() takes at most 2 positional argument")
+
+    if len(args) == 0 or args[0] == None:
+        yield from select_from_condition(context, cls, None, **kwargs)
+
+    elif isinstance(args[0], Condition):
+        print(".......")
+        yield from select_from_condition(context, cls, args[0], **kwargs)
+
+    elif isinstance(args[0], str):
+        yield from select_from_sql(context, cls, args[0], args[1] if len(args) > 1 else (), **kwargs)
+
+    else:
+        raise ValueError("Argument of type {type(args[0])} not supported in select()")
 
 
 def table_exists(con, tablename: str) -> bool:
