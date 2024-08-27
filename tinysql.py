@@ -4,6 +4,7 @@ from enum import Flag, auto
 from pathlib import Path
 from types import SimpleNamespace
 from typing import NamedTuple, Tuple, Callable, List, Dict, Any, get_type_hints, Type
+from collections import defaultdict
 import io
 import sqlite3
 import pickle
@@ -11,7 +12,7 @@ import numpy as np
 from uuid import uuid4
 
 
-__version__ = '0.2.6'
+__version__ = '0.2.7'
 
 
 TABLE_REGISTRY = {}
@@ -482,15 +483,11 @@ def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, repla
 
 
 def group_by_type(data: List[object]):
-    grouped_data = []
-    current_type = None
+    grouped_data: Dict[type, List[Any]] = defaultdict(list)
     for item in data:
         item_type = type(item)
-        if item_type != current_type:
-            grouped_data.append([])
-            current_type = item_type
-        grouped_data[-1].append(item)
-    return grouped_data
+        grouped_data[item_type].append(item)
+    return list(grouped_data.values())
 
 
 def insertmany_from_class(context: DatabaseContext, data: list[Type], replace=True):
