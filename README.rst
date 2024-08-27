@@ -244,7 +244,7 @@ sqlite's autoinc in the `sqlite documentation <https://www.sqlite.org/autoinc.ht
     my_data = FancyData(autoinc(), 'really amazing data!')
 
 There's another subtle issue with autoinc, namely when using tinysql with an
-external storage for BLOBs. At the time of writing the an entry into the
+external storage for BLOBs. At the time of writing an entry into the
 database, or more precisely before writing the data to the table, the value of
 the autoinc field might not yet be determined. Yet, the primary key(s) of a
 mapped/registered class will be used in the production of the filename where
@@ -277,13 +277,12 @@ Here's how to use it:
     class UUIDTest:
         id: uuid
 
-
     def test_uuid(context):
         context.insert(UUIDTest(uuid()))
         for obj in context.select(UUIDTest):
             print(obj)
 
-As with anything else in ``tinysql``, it is kept as barebones as it get. That
+As with anything else in ``tinysql``, it is kept as barebones as it gets. That
 means that you have to specify the value itself during construction (see the
 ``context.insert(...)`` line).  You could also move this into a custom
 constructor or use ``id: uuid = field(default_constructor = lambda: uuid())``,
