@@ -46,7 +46,18 @@ Use Cases
 Installation
 ------------
 
-To install ``tinysql``, simply run
+At the moment, ``tinysql`` is not yet available on PyPI. To install it, you
+therefore need to download or clone this repository and then use ``pip``.
+Example:
+
+.. code-block:: sh
+
+    $ git clone https://github.com/nwaniek/tinysql.git
+    $ cd tinysql
+    $ pip install .
+
+In the future, meaning as soon as ``tinysql`` is available on PyPI, you can
+install it by simply running
 
 .. code-block:: sh
 
@@ -277,7 +288,7 @@ means that you have to specify the value itself during construction (see the
 ``context.insert(...)`` line).  You could also move this into a custom
 constructor or use ``id: uuid = field(default_constructor = lambda: uuid())``,
 but this would likely break ``tinysql``'s ``select`` statement, which merely
-passes each result row from the a database query to the constructor of a class.
+passes each result row from a database query to the constructor of a class.
 
 
 Working with several databases
