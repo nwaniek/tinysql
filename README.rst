@@ -1,10 +1,10 @@
-`tinysql` - A minimalistic object-relational mapper
+``tinysql`` - A minimalistic object-relational mapper
 ===================================================
 
 Introduction
 ------------
 
-`tinysql` is a lightweight Object-Relational Mapping (ORM) layer designed to facilitate the management of tabular data.
+``tinysql`` is a lightweight Object-Relational Mapping (ORM) layer designed to facilitate the management of tabular data.
 For instance, this relates to data from various domains such as computational neuroscience, data science, analytics, time series analysis, machine learning, and artificial intelligence.
 It provides a minimalistic approach to map such data onto an SQLite database without obscuring the underlying SQL.
 Binary data can be stored outside the database, because who doesn't need to share data with their colleagues but doesn't want to send or copy a terabyte-sized database.
@@ -13,14 +13,14 @@ In fact, it most likely shouldn't even be called an ORM.
 
 Goal
 ----
-The primary goal of `tinysql` is to offer a barebones ORM that maintains the expressive power of SQL.
-By not abstracting away SQL, `tinysql` ensures that users can fully leverage SQL while benefiting from a simplified interface to map tabular/struct data onto a database.
+The primary goal of ``tinysql`` is to offer a barebones ORM that maintains the expressive power of SQL.
+By not abstracting away SQL, ``tinysql`` ensures that users can fully leverage SQL while benefiting from a simplified interface to map tabular/struct data onto a database.
 
 
-Why `tinysql`?
+Why ``tinysql``?
 --------------
 While more powerful alternatives like `SQLAlchemy <https://www.sqlalchemy.org>`_ or `DataJoint <https://www.datajoint.com/>`_ are available, they often come with additional complexity.
-`tinysql` addresses the need for a straightforward, minimalistic solution by focusing on:
+``tinysql`` addresses the need for a straightforward, minimalistic solution by focusing on:
 
 * **Simplicity**: Avoids the overhead of complex ORM frameworks.
 * **Direct SQL Access**: Retains the ability to execute custom SQL queries and perform explicit data manipulations.
@@ -29,14 +29,14 @@ While more powerful alternatives like `SQLAlchemy <https://www.sqlalchemy.org>`_
 
 Features
 --------
-* **Minimalistic Design**: `tinysql` offers a simple and intuitive interface for database interactions.
-* **Direct SQL Execution**: `tinysql` allows for writing and executing custom SQL scripts without restrictions.
-* **Flexible Data Handling**: `tinysql` supports storing numpy arrays and other large data objects as BLOBs on disk, making data exchange easier.
+* **Minimalistic Design**: ``tinysql`` offers a simple and intuitive interface for database interactions.
+* **Direct SQL Execution**: ``tinysql`` allows for writing and executing custom SQL scripts without restrictions.
+* **Flexible Data Handling**: ``tinysql`` supports storing numpy arrays and other large data objects as BLOBs on disk, making data exchange easier.
 
 
 Use Cases
 ---------
-`tinysql` is particularly useful for scenarios such as:
+``tinysql`` is particularly useful for scenarios such as:
 
 * **Local Data Analysis**: You need a lightweight tool for working with data locally without the overhead of larger frameworks.
 * **Data Exchange**: You want to share specific data files (e.g. numpy arrays) without transferring entire databases.
@@ -46,7 +46,7 @@ Use Cases
 Installation
 ------------
 
-To install `tinysql`, simply run
+To install ``tinysql``, simply run
 
 .. code-block:: sh
 
@@ -56,7 +56,7 @@ To install `tinysql`, simply run
 Usage
 -----
 
-To use `tinysql`, you define your tables and interact with your database using minimalistic ORM methods.
+To use ``tinysql``, you define your tables and interact with your database using minimalistic ORM methods.
 A brief example could look as follows:
 
 .. code-block:: python
@@ -107,7 +107,7 @@ Enums
 
 Of course, we also often use all kinds of enums to identify stuff or flag things.
 And, obviously, you should map your enums to the database, too.
-This is why `tinysql` supports all standard python enum types.
+This is why ``tinysql`` supports all standard python enum types.
 
 .. code-block:: python
 
@@ -134,8 +134,8 @@ This is why `tinysql` supports all standard python enum types.
 Conditions
 ~~~~~~~~~~
 
-Despite not really being a full-fledged ORM, `tinysql` provides a means to write
-conditionals that are translated to SQL. In the spirit of `tinysql`, they are
+Despite not really being a full-fledged ORM, ``tinysql`` provides a means to write
+conditionals that are translated to SQL. In the spirit of ``tinysql``, they are
 kept as minimalistic as possible and as close to SQL as it gets:
 
 .. code-block:: python
@@ -146,7 +146,7 @@ kept as minimalistic as possible and as close to SQL as it gets:
     for obj in results:
         print(obj)
 
-`tinysql` currently provides Equals, NotEquals, GreaterThan, LessThan, Between,
+``tinysql`` currently provides Equals, NotEquals, GreaterThan, LessThan, Between,
 Like, In, And, Or, and Not. You can nest them arbitrarily and thereby build
 complex expressions, but then again you might just simply drop into SQL to
 achieve this, as will be shown next.
@@ -155,7 +155,7 @@ achieve this, as will be shown next.
 Direct SQL passthrough
 ~~~~~~~~~~~~~~~~~~~~~~
 
-`tinysql` does not hide the connection to the sqlite database it is connected to
+``tinysql`` does not hide the connection to the sqlite database it is connected to
 (after using it as a context manager or runnning `init_tables`). It provides
 some methods that you can use to fill specific objects like `select` where, you
 can pass an SQL expression, and it will fill a particular class with the
@@ -169,7 +169,7 @@ results:
 
 If you use select, or any other SQL passthrough method, it is up to you to make
 sure that the result from the database can be accepted by the constructor of the
-class that you pass in. That is, under the hood, `tinysql` merely forwards the
+class that you pass in. That is, under the hood, ``tinysql`` merely forwards the
 results via `cls(*row)`.
 
 It is also possible to directly write SQL statements and execute them as you
@@ -184,7 +184,7 @@ usually would with sqlite:
             print(row)
 
 
-Moreover, `tinysql` provides some methods like `execute` and `executemany`,
+Moreover, ``tinysql`` provides some methods like ``execute`` and ``executemany``,
 that directly pass through to the connection and commits the statement, to save
 you a few keystrokes:
 
@@ -245,16 +245,51 @@ at runtime before writing things to the database, such as a SHA1 over your data,
 or a time-based UUID.
 
 
+UUIDs
+~~~~~
+
+For convenience, and to ameliorate the situation regarding autoincrement and
+external storage, ``tinysql`` provides a specific class ``uuid``. Well, it
+really is just a wrapper around ``str`` and the function ``gen_uuid()``, which
+in turn simply calls ``uuid4().hex`` from python's ``uuid`` module... The reason
+``tinysql.uuid`` exists is to make this type somewhat explicit, with the goal to
+improve the self-documentation level of code.
+
+Here's how to use it:
+
+.. code-block:: python
+
+    from tinysql import db_table, uuid
+
+    @db_table("UUIDTest", primary_keys=["id"])
+    @dataclass
+    class UUIDTest:
+        id: uuid
+
+
+    def test_uuid(context):
+        context.insert(UUIDTest(uuid()))
+        for obj in context.select(UUIDTest):
+            print(obj)
+
+As with anything else in ``tinysql``, it is kept as barebones as it get. That
+means that you have to specify the value itself during construction (see the
+``context.insert(...)`` line).  You could also move this into a custom
+constructor or use ``id: uuid = field(default_constructor = lambda: uuid())``,
+but this would likely break ``tinysql``'s ``select`` statement, which merely
+passes each result row from the a database query to the classes constructor.
+
+
 Working with several databases
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Other times, you might want to work with several databases at the same time.
-While this is possible with `tinysql`, there are some limitations you need to be
+While this is possible with ``tinysql``, there are some limitations you need to be
 aware of. To understand these limitations, it's necessary to look under the hood
-of how `tinysql` manages tables.
+of how ``tinysql`` manages tables.
 
-When you use the `db_enum` or `db_table` decorator as in the examples above,
-then `tinysql` will store an entry into its 'global table registry'. You can
+When you use the ``db_enum`` or ``db_table`` decorator as in the examples above,
+then ``tinysql`` will store an entry into its 'global table registry'. You can
 inspect this registry if you want at runtime:
 
 .. code-block:: python
@@ -270,13 +305,13 @@ inspect this registry if you want at runtime:
     print(tinysql.TABLE_REGISTRY)
 
 
-When you create/open a connection to a database using `setup_db`, then the
+When you create/open a connection to a database using ``setup_db``, then the
 DatabaseContext that is returned from the function call will inherit this global
 registry.
 
 To handle several databases, you need to register a class against a specific
 context. You also need to initialize the tables by either using the context as a
-context manager, or explicitly invoking its `init_tables` method. Here's an
+context manager, or explicitly invoking its ``init_tables`` method. Here's an
 example for all of this:
 
 .. code-block:: python
@@ -327,15 +362,15 @@ example for all of this:
     context2.close()
 
 
-Extending `tinysql` with other types
+Extending ``tinysql`` with other types
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you wish to extend `tinysql` with other types than the standard types that it
+If you wish to extend ``tinysql`` with other types than the standard types that it
 already supports, autoinc, np.ndarray, and other BLOBs, then best have a look at
-`tinysql`'s `TYPE_MAPPING` variable. This is simply a dict which contains a map
+``tinysql``'s ``TYPE_MAPPING`` variable. This is simply a dict which contains a map
 from a type that you want to use in a type annotation to the sqlite database
 type and some additional flag. You can either inject your own type mappings into
-`TYPE_MAPPING`, or change it directly there (remember, tinysql is as basic as it
+``TYPE_MAPPING``, or change it directly there (remember, tinysql is as basic as it
 gets, and a 'single file package').
 
 
@@ -347,6 +382,6 @@ If you have suggestions, bug reports, or want to contribute code, please open an
 
 License
 -------
-`tinysql` is licensed under the MIT License.
+``tinysql`` is licensed under the MIT License.
 See the `LICENSE <LICENSE>`_ file for details.
 

@@ -8,6 +8,7 @@ import io
 import sqlite3
 import pickle
 import numpy as np
+from uuid import uuid4
 
 
 __version__ = '0.2.6'
@@ -34,7 +35,25 @@ class autoinc(int):
         elif isinstance(value, int):
             obj = super().__new__(cls, value)
         else:
-            raise TypeError(f"AutoInc must be an integer or None, got {type(value)}")
+            raise TypeError(f"autoinc must be an integer or None, got {type(value)}")
+        return obj
+
+    def __repr__(self):
+        return f"{super().__repr__()}"
+
+
+def gen_uuid():
+    return uuid4().hex
+
+
+class uuid(str):
+    def __new__(cls, value=None):
+        if value is None:
+            obj = super().__new__(cls, gen_uuid())
+        elif isinstance(value, str):
+            obj = super().__new__(cls, value)
+        else:
+            raise TypeError(f"uuid must be a str or None, got {type(value)}")
         return obj
 
     def __repr__(self):
@@ -60,7 +79,8 @@ TYPE_MAPPING = {
 
     # special types supported by tinysql and mapped to appropriate sqlite
     # representations
-    autoinc:    TypeMap("INTEGER", TypeFlags.AUTOINC),
+    autoinc:    TypeMap('INTEGER', TypeFlags.AUTOINC),
+    uuid:       TypeMap('TEXT',    TypeFlags.NONE),
 }
 
 

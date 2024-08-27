@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import NamedTuple
 import time
@@ -9,9 +9,6 @@ import uuid
 import tinysql
 
 
-
-def gen_uuid():
-    return uuid.uuid4().hex
 
 @tinysql.db_table("AmazingValues", primary_keys=["id"])
 class AmazingValues(NamedTuple):
@@ -40,14 +37,14 @@ def test_insert(context):
     print("Table 'AmazingValues' exists:", tinysql.table_exists(context.con, "AmazingValues"))
 
     # insert via object
-    values = AmazingValues(gen_uuid(), "hello, world!", 123.12, np.ones((4, 4)))
+    values = AmazingValues(tinysql.gen_uuid(), "hello, world!", 123.12, np.ones((4, 4)))
     context.insert(values)
 
     # testing the dataclass
-    context.insert(DataClassTest(gen_uuid(), "hello, world, this is a dataclass!", 123.12, np.ones((4, 4))))
+    context.insert(DataClassTest(tinysql.gen_uuid(), "hello, world, this is a dataclass!", 123.12, np.ones((4, 4))))
 
     # insert as a dict with corresponding tablespec
-    values = {'id': gen_uuid(),
+    values = {'id': tinysql.gen_uuid(),
               'value0': 'world, hello!',
               'value1': 71.71,
               'value2': np.eye(10)}
@@ -101,9 +98,9 @@ def test_autoinc():
 
 
 def test_insertmany(context):
-    values = [AmazingValues(gen_uuid(), "one", 1.0, np.ones((1,1))),
-              AmazingValues(gen_uuid(), "two", 2.0, np.ones((2,2))),
-              AmazingValues(gen_uuid(), "three", 3.0, np.ones((3,3)))]
+    values = [AmazingValues(tinysql.gen_uuid(), "one", 1.0, np.ones((1,1))),
+              AmazingValues(tinysql.gen_uuid(), "two", 2.0, np.ones((2,2))),
+              AmazingValues(tinysql.gen_uuid(), "three", 3.0, np.ones((3,3)))]
     context.insertmany(values)
     sql = "SELECT * FROM AmazingValues"
     rows = context.con.execute(sql)
@@ -181,14 +178,28 @@ def test_dcmethods(context):
     print(dcm1.pk2, dcm1.to_timestr(), dcm2.pk2, dcm2.to_timestr())
 
 
+
+@tinysql.db_table("UUIDTest", primary_keys=["id"])
+@dataclass
+class UUIDTest:
+    id: tinysql.uuid
+
+
+def test_uuid(context):
+    context.insert(UUIDTest(tinysql.uuid()))
+    for obj in context.select(UUIDTest):
+        print(obj)
+
+
 if __name__ == "__main__":
     context = tinysql.DatabaseContext('test.sqlite', 'test_storage')
     with context:
-        test_autoinc()
-        test_insert(context)
-        test_enum(context)
-        test_select(context)
-        test_select_sql(context)
-        test_insertmany(context)
-        test_update(context)
-        test_dcmethods(context)
+        # test_autoinc()
+        # test_insert(context)
+        # test_enum(context)
+        # test_select(context)
+        # test_select_sql(context)
+        # test_insertmany(context)
+        # test_update(context)
+        # test_dcmethods(context)
+        test_uuid(context)
