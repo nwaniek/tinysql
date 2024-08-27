@@ -12,7 +12,7 @@ import numpy as np
 from uuid import uuid4
 
 
-__version__ = '0.2.7'
+__version__ = '0.2.8'
 
 
 TABLE_REGISTRY = {}
@@ -228,6 +228,7 @@ class DatabaseContext:
             sqlite3.register_adapter(np.ndarray, adapt_array)
             sqlite3.register_converter("ndarray", convert_array)
         self.con                  = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+
         self.insert_fn            = insert
         self.select_fn            = select
         self.insertmany_fn        = insertmany
@@ -254,11 +255,11 @@ class DatabaseContext:
     def close(self):
         self.con.close()
 
-    def insert(self, data, tspec: TableSpec | None = None, replace=True):
-        self.insert_fn(self, data, tspec, replace)
+    def insert(self, *args, **kwargs):
+        self.insert_fn(self, *args, **kwargs)
 
-    def insertmany(self, data, tspec: TableSpec | None = None, replace=True):
-        self.insertmany_fn(self, data, tspec, replace)
+    def insertmany(self, *args, **kwargs):
+        self.insertmany_fn(self, *args, **kwargs)
 
     def select(self, cls: Type, *params, **kwargs):
         yield from self.select_fn(self, cls, *params, **kwargs)
@@ -490,31 +491,43 @@ def group_by_type(data: List[object]):
     return list(grouped_data.values())
 
 
-def insertmany_from_class(context: DatabaseContext, data: list[Type], replace=True):
-    groups = group_by_type(data)
-    for group in groups:
-        tspec = group[0]._tinysql_tspec
-        sql = group[0]._tinysql_insert if not replace else group[0]._tinysql_insert_replace
-        data_tuples = [prepare_data_tuple(context, item, tspec, lambda d, k: getattr(d, k)) for item in group]
-        cur = context.con.cursor()
-        cur.executemany(sql, data_tuples)
-        context.con.commit()
 
-
-def insertmany_from_dict(context: DatabaseContext, data: list[Dict], tspec: TableSpec, replace=True):
-    sql = sql_builder_insert(tspec, replace)
-    data_tuples = [prepare_data_tuple(context, item, tspec, lambda d, k: getattr(d, k)) for item in data]
+def insertmany_impl(context: DatabaseContext, data: list, sql: str, tspec: TableSpec, get_fn: Callable):
+    data_tuples = [prepare_data_tuple(context, item, tspec, get_fn) for item in data]
     cur = context.con.cursor()
     cur.executemany(sql, data_tuples)
     context.con.commit()
 
 
-def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = None, replace: bool = True):
+def insertmany_from_class(context: DatabaseContext, data: list[Type], replace: bool = True, keep_order: bool = False):
+    groups = group_by_type(data)
+    all_equal_type = len(groups) == 1
+    if keep_order or all_equal_type:
+        if all_equal_type:
+            tspec = data[0]._tinysql_tspec
+            sql   = data[0]._tinysql_insert if not replace else data[0]._tinysql_insert_replace
+            insertmany_impl(context, data, sql, tspec, lambda d, k: getattr(d, k))
+        else:
+            for item in data:
+                insert_from_class(context, item, replace)
+    else:
+        for group in groups:
+            tspec = group[0]._tinysql_tspec
+            sql   = group[0]._tinysql_insert if not replace else group[0]._tinysql_insert_replace
+            insertmany_impl(context, group, sql, tspec, lambda d, k: getattr(d, k))
+
+
+def insertmany_from_dict(context: DatabaseContext, data: list[Dict], tspec: TableSpec, replace: bool = True):
+    sql = sql_builder_insert(tspec, replace)
+    insertmany_impl(context, data, sql, tspec, lambda d, k: d[k])
+
+
+def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = None, replace: bool = True, keep_order: bool = False):
     if not len(data):
         return
 
     if hasattr(data[0], '_tinysql_tspec'):
-        insertmany_from_class(context, data, replace)
+        insertmany_from_class(context, data, replace, keep_order)
 
     elif isinstance(data[0], dict):
         if tspec is None:

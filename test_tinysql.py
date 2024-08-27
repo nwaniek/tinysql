@@ -100,8 +100,9 @@ def test_autoinc():
 def test_insertmany(context):
     values = [AmazingValues(tinysql.gen_uuid(), "one", 1.0, np.ones((1,1))),
               AmazingValues(tinysql.gen_uuid(), "two", 2.0, np.ones((2,2))),
+              DataClassTest(tinysql.gen_uuid(), "out of order", 17.17, np.zeros((1,1))),
               AmazingValues(tinysql.gen_uuid(), "three", 3.0, np.ones((3,3)))]
-    context.insertmany(values)
+    context.insertmany(values, keep_order=True)
     sql = "SELECT * FROM AmazingValues"
     rows = context.con.execute(sql)
     for row in rows:
