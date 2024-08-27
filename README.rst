@@ -1,4 +1,4 @@
-``tinysql`` - A minimalistic object-relational mapper
+tinysql - A minimalistic object-relational mapper
 ===================================================
 
 Introduction
@@ -17,8 +17,8 @@ The primary goal of ``tinysql`` is to offer a barebones ORM that maintains the e
 By not abstracting away SQL, ``tinysql`` ensures that users can fully leverage SQL while benefiting from a simplified interface to map tabular/struct data onto a database.
 
 
-Why ``tinysql``?
---------------
+Why tinysql?
+------------
 While more powerful alternatives like `SQLAlchemy <https://www.sqlalchemy.org>`_ or `DataJoint <https://www.datajoint.com/>`_ are available, they often come with additional complexity.
 ``tinysql`` addresses the need for a straightforward, minimalistic solution by focusing on:
 
@@ -277,7 +277,7 @@ means that you have to specify the value itself during construction (see the
 ``context.insert(...)`` line).  You could also move this into a custom
 constructor or use ``id: uuid = field(default_constructor = lambda: uuid())``,
 but this would likely break ``tinysql``'s ``select`` statement, which merely
-passes each result row from the a database query to the classes constructor.
+passes each result row from the a database query to the constructor of a class.
 
 
 Working with several databases
@@ -362,8 +362,8 @@ example for all of this:
     context2.close()
 
 
-Extending ``tinysql`` with other types
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Extending tinysql with other types
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you wish to extend ``tinysql`` with other types than the standard types that it
 already supports, autoinc, np.ndarray, and other BLOBs, then best have a look at
