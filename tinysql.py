@@ -502,14 +502,13 @@ def insertmany_impl(context: DatabaseContext, data: list, sql: str, tspec: Table
 def insertmany_from_class(context: DatabaseContext, data: list[Type], replace: bool = True, keep_order: bool = False):
     groups = group_by_type(data)
     all_equal_type = len(groups) == 1
-    if keep_order or all_equal_type:
-        if all_equal_type:
-            tspec = data[0]._tinysql_tspec
-            sql   = data[0]._tinysql_insert if not replace else data[0]._tinysql_insert_replace
-            insertmany_impl(context, data, sql, tspec, lambda d, k: getattr(d, k))
-        else:
-            for item in data:
-                insert_from_class(context, item, replace)
+    if all_equal_type:
+        tspec = data[0]._tinysql_tspec
+        sql   = data[0]._tinysql_insert if not replace else data[0]._tinysql_insert_replace
+        insertmany_impl(context, data, sql, tspec, lambda d, k: getattr(d, k))
+    elif keep_order:
+        for item in data:
+            insert_from_class(context, item, replace)
     else:
         for group in groups:
             tspec = group[0]._tinysql_tspec
