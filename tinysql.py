@@ -507,7 +507,8 @@ def insertmany_from_class(context: DatabaseContext, data: list[Type], replace: b
         sql   = data[0]._tinysql_insert if not replace else data[0]._tinysql_insert_replace
         insertmany_impl(context, data, sql, tspec, lambda d, k: getattr(d, k))
     elif keep_order:
-        [insert_from_class(context, item, replace) for item in data]
+        for item in data:
+            insert_from_class(context, item, replace)
     else:
         for group in groups:
             tspec = group[0]._tinysql_tspec
