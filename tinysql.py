@@ -463,23 +463,29 @@ def prepare_data_tuple(context: DatabaseContext, data, tspec: TableSpec, get_fn:
     return data_tuple
 
 
-def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_fn: Callable, from_class=False):
+def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_fn: Callable):
     data_tuple = prepare_data_tuple(context, data, tspec, get_fn)
     cur = context.con.cursor()
     cur.execute(sql, data_tuple)
-    if from_class and data._tinysql_tspec.has_autoinc:
-        setattr(data, data._tinysql_tspec.primary_keys[0], cur.lastrowid)
+    rowid = None
+    if tspec.has_autoinc:
+        rowid = cur.lastrowid
     context.con.commit()
+    return rowid
 
 
 def insert_from_class(context: DatabaseContext, data: Type, replace=True):
     insert_sql = data._tinysql_insert if not replace else data._tinysql_insert_replace
-    insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k), True)
+    rowid = insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k))
+    if data._tinysql_tspec.has_autoinc:
+        setattr(data, data._tinysql_tspec.primary_keys[0], rowid)
 
 
 def insert_from_dict(context: DatabaseContext, data: Dict, tspec: TableSpec, replace=True):
     insert_sql = sql_builder_insert(tspec, replace)
-    insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k], False)
+    rowid = insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k])
+    if tspec.has_autoinc:
+        data[tspec.autoinc_field] = rowid
 
 
 def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace = True):
