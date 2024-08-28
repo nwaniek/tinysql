@@ -491,7 +491,6 @@ def group_by_type(data: List[object]):
     return list(grouped_data.values())
 
 
-
 def insertmany_impl(context: DatabaseContext, data: list, sql: str, tspec: TableSpec, get_fn: Callable):
     data_tuples = [prepare_data_tuple(context, item, tspec, get_fn) for item in data]
     cur = context.con.cursor()
