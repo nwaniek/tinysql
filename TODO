@@ -3,6 +3,7 @@ TODO
 * insert -> when using an INTEGER PRIMARY KEY, then sqlite will fill it
   automatically with the lastest rowid if no value is specified, maybe adapt
   this also in tinysql
+* insertmany -> autoinc fields won't work here, maybe insert rows individually?
 * transactions
 * select() -> specify return type (return instances, dicts, tuples, etc), and also SQL instead of cls
 * documentation
