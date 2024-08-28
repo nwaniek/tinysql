@@ -641,7 +641,6 @@ def select(context: DatabaseContext, cls: Type, *args, **kwargs):
         yield from select_from_condition(context, cls, None, **kwargs)
 
     elif isinstance(args[0], Condition):
-        print(".......")
         yield from select_from_condition(context, cls, args[0], **kwargs)
 
     elif isinstance(args[0], str):
