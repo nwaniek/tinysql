@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import inspect
 from enum import Flag, auto
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +13,7 @@ import numpy as np
 from uuid import uuid4
 
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
 TABLE_REGISTRY = {}
@@ -87,10 +88,12 @@ TYPE_MAPPING = {
 
 class TableSpec:
     def __init__(self, tablename: str):
-        self.name         = tablename
-        self.fields       = SimpleNamespace()
-        self.primary_keys = []
-        self.foreign_keys = []
+        self.name          = tablename
+        self.fields        = SimpleNamespace()
+        self.primary_keys  = []
+        self.foreign_keys  = []
+        self.has_autoinc   = False
+        self.autoinc_field = ''
 
     def __repr__(self):
         field_str = [f"{fname}: {getattr(self.fields, fname)}" for fname in vars(self.fields)]
@@ -232,6 +235,7 @@ class DatabaseContext:
         self.insert_fn            = insert
         self.select_fn            = select
         self.insertmany_fn        = insertmany
+        self.update_fn            = update
         self.tables_initialized   = False
 
     def init_tables(self):
@@ -264,6 +268,9 @@ class DatabaseContext:
     def select(self, cls: Type, *params, **kwargs):
         yield from self.select_fn(self, cls, *params, **kwargs)
 
+    def update(self, what, *args, **kwargs):
+        self.update_fn(self, what, *args, **kwargs)
+
     def __enter__(self):
         self.init_tables()
         return self
@@ -272,24 +279,15 @@ class DatabaseContext:
         self.close()
 
 
+def table_has_autoinc(tspec: TableSpec) -> Tuple[bool, str | None]:
+    for fname, tmap in tspec.fields.__dict__.items():
+        if TypeFlags.AUTOINC in tmap.flags:
+            return True, fname
+    return False, None
+
+
 def sql_builder_create_table(tspec: TableSpec) -> str:
     primary_keys = tspec.primary_keys or []
-    # sqlite allows only one autoincrement field, and this is effectively also
-    # the primary key. enforce this behavior by checking that there's only one
-    # pk that is also autoinc (if there's autoinc)
-    autoinc_field = None
-    has_autoinc = False
-    for fname, tmap in tspec.fields.__dict__.items():
-        has_autoinc = TypeFlags.AUTOINC in tmap.flags
-        if has_autoinc:
-            autoinc_field = fname
-            break
-    if has_autoinc:
-        if autoinc_field not in tspec.primary_keys:
-            raise ValueError(f"Field {autoinc_field} is declared AUTOINCREMENT, but not a PRIMARY KEY. This is not supported by sqlite.")
-        if len(tspec.primary_keys) > 1:
-            raise ValueError(f"AUTOINCREMENT not supported on composite PRIMARY KEYs in sqlite. Affected field: {autoinc_field}.")
-
     sql = f"CREATE TABLE {tspec.name} ("
     sql += ", ".join(f"{fname} {tmap.sql_type}{' PRIMARY KEY' if fname in primary_keys and len(primary_keys) <= 1 else ''}{' AUTOINCREMENT' if TypeFlags.AUTOINC in tmap.flags else ''}" for fname, tmap in tspec.fields.__dict__.items())
     if tspec.foreign_keys is not None and len(tspec.foreign_keys) > 0:
@@ -345,8 +343,20 @@ def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys
             else:
                 raise ValueError(f"Unsupported field type: {field_type} for field {field_name}")
 
-            ts.primary_keys = primary_keys or []
-            ts.foreign_keys = foreign_keys or []
+            # special treatment of autoinc
+            if TypeFlags.AUTOINC in TYPE_MAPPING[field_type].flags:
+                if ts.has_autoinc:
+                    raise ValueError(f"Multiple autoincrement fields not supported by sqlite. Incriminating field: {field_name}")
+                if primary_keys is None or field_name not in primary_keys:
+                    raise ValueError(f"Field {field_name} is declared AUTOINCREMENT, but not a PRIMARY KEY. This is not supported by sqlite.")
+                if len(primary_keys) > 1:
+                    raise ValueError(f"AUTOINCREMENT not supported on composite PRIMARY KEYs in sqlite. Affected field: {field_name}.")
+
+                ts.has_autoinc = True
+                ts.autoinc_field = field_name
+
+        ts.primary_keys = primary_keys or []
+        ts.foreign_keys = foreign_keys or []
 
         registry = context.registry if context else TABLE_REGISTRY
         if tablename in registry:
@@ -453,21 +463,23 @@ def prepare_data_tuple(context: DatabaseContext, data, tspec: TableSpec, get_fn:
     return data_tuple
 
 
-def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_fn: Callable):
+def insert_impl(context: DatabaseContext, data, sql: str, tspec: TableSpec, get_fn: Callable, from_class=False):
     data_tuple = prepare_data_tuple(context, data, tspec, get_fn)
     cur = context.con.cursor()
     cur.execute(sql, data_tuple)
+    if from_class and data._tinysql_tspec.has_autoinc:
+        setattr(data, data._tinysql_tspec.primary_keys[0], cur.lastrowid)
     context.con.commit()
 
 
 def insert_from_class(context: DatabaseContext, data: Type, replace=True):
     insert_sql = data._tinysql_insert if not replace else data._tinysql_insert_replace
-    insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k))
+    insert_impl(context, data, insert_sql, data._tinysql_tspec, lambda d, k: getattr(d, k), True)
 
 
 def insert_from_dict(context: DatabaseContext, data: Dict, tspec: TableSpec, replace=True):
     insert_sql = sql_builder_insert(tspec, replace)
-    insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k])
+    insert_impl(context, data, insert_sql, tspec, lambda d, k: d[k], False)
 
 
 def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace = True):
@@ -532,7 +544,7 @@ def insertmany(context: DatabaseContext, data: list, tspec: TableSpec | None = N
         raise RuntimeError(f"Type not mapped to database: {type(data)}")
 
 
-def update(context: DatabaseContext, cls: Type, updates, condition: Condition | None = None):
+def update_from_class(context: DatabaseContext, cls: Type, updates, condition: Condition | None = None):
     if not hasattr(cls, '_tinysql_tspec'):
         raise TypeError("Type not mapped to database: {cls}")
 
@@ -550,6 +562,30 @@ def update(context: DatabaseContext, cls: Type, updates, condition: Condition | 
     cur = context.con.cursor()
     cur.execute(sql, params)
     context.con.commit()
+
+
+def update_from_object(context: DatabaseContext, obj: Any):
+    if not hasattr(obj, '_tinysql_tspec'):
+        raise TypeError("Type of object not mapped to database: {type(obj)}")
+
+    tspec = obj._tinysql_tspec
+    sql = f"UPDATE {tspec.name} SET "
+    sql += ", ".join([f"{field} = ?" for field in vars(obj) if not field in tspec.primary_keys])
+    params = [getattr(obj, field) for field in vars(obj) if not field in tspec.primary_keys]
+
+    sql += " WHERE " + " AND ".join(f"{key} = ?" for key in tspec.primary_keys)
+    params.extend([getattr(obj, key) for key in tspec.primary_keys])
+
+    cur = context.con.cursor()
+    cur.execute(sql, params)
+    context.con.commit()
+
+
+def update(context: DatabaseContext, what, *args, **kwargs):
+    if inspect.isclass(what):
+        update_from_class(context, what, *args, **kwargs)
+    else:
+        update_from_object(context, what, *args, **kwargs)
 
 
 def execute(context: DatabaseContext, sql: str, parameters, /):

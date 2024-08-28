@@ -110,10 +110,19 @@ def test_insertmany(context):
 
 
 @tinysql.db_table("Employee", primary_keys=['id'])
-class Employee(NamedTuple):
+@dataclass
+class Employee:
     id: tinysql.autoinc
     name: str
     salary: float
+
+
+@tinysql.db_table("StrData", primary_keys=['id0', 'id1'])
+@dataclass
+class StrData:
+    id0: tinysql.uuid
+    id1: tinysql.uuid
+    data: str
 
 
 def test_update(context):
@@ -150,6 +159,17 @@ def test_update(context):
     results = context.select(Employee)
     for result in results:
         print("  ", result)
+
+    # update one particular instance
+    data = StrData(tinysql.uuid(), tinysql.uuid(), "This is old data")
+    context.insert(data)
+    for result in context.select(StrData):
+        print(result)
+    data.data = "This is new data!"
+    context.update(data)
+    for result in context.select(StrData):
+        print(result)
+
 
 
 @tinysql.db_table("DCWithMethods", primary_keys=["pk1", "pk2"])

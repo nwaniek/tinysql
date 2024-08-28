@@ -1,5 +1,8 @@
 TODO
 ====
+* insert -> when using an INTEGER PRIMARY KEY, then sqlite will fill it
+  automatically with the lastest rowid if no value is specified, maybe adapt
+  this also in tinysql
 * transactions
 * select() -> specify return type (return instances, dicts, tuples, etc), and also SQL instead of cls
 * documentation
@@ -7,6 +10,8 @@ TODO
 
 DONE
 ====
+* insert -> fill autoinc fields after writing to database (required for
+  subsequent updates). use python sqlite's lastrowid to get the value
 * lazy db_enum
 * simple conditions for select
 * limit and offset select()
@@ -14,5 +19,6 @@ DONE
   that might be dumped, while other types won't (TYPE_MAPPING -> ("ndarray",
   True) or similar, to reduce hard-coding types)
 * insertmany -> use executemany 
-* update
+* update from class or dict
+* update one particular instance using its PKs
 * execute, executemany
