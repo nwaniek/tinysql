@@ -2,3 +2,4 @@ tinysql.egg-info/
 __pycache__/
 test.sqlite
 test_storage/
+build

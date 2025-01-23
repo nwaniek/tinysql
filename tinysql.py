@@ -13,9 +13,7 @@ import numpy as np
 from uuid import uuid4
 
 
-__version__ = '0.2.9'
-
-
+__version__ = '0.3.0'
 TABLE_REGISTRY = {}
 
 
@@ -218,27 +216,38 @@ class Not(Condition):
 
 class DatabaseContext:
     def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, use_global_registry: bool = True):
-        # sanitize paths
-        db_path = Path(db_path) if isinstance(db_path, str) else db_path
-        table_storage_root = Path(table_storage_root) if isinstance(table_storage_root, str) else table_storage_root
-
-        self.use_global_registry  = use_global_registry
-        self.registry             = TABLE_REGISTRY if use_global_registry else {}
-        self.db_path              = db_path
-        self.table_storage_root   = table_storage_root
-        self.use_external_storage = table_storage_root is not None
-        if not self.use_external_storage:
-            sqlite3.register_adapter(np.ndarray, adapt_array)
-            sqlite3.register_converter("ndarray", convert_array)
-        self.con                  = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
-
+        self.set_paths(db_path, table_storage_root, use_global_registry)
+        self.con                  = None
         self.insert_fn            = insert
         self.select_fn            = select
         self.insertmany_fn        = insertmany
         self.update_fn            = update
         self.tables_initialized   = False
 
+    def set_paths(self, db_path: Path | str, table_storage_root: Path | str | None, use_global_registry: bool = True):
+        # sanitize paths
+        db_path = Path(db_path) if isinstance(db_path, str) else db_path
+        table_storage_root = Path(table_storage_root) if isinstance(table_storage_root, str) else table_storage_root
+
+        # initialize members according to path configuration
+        self.use_global_registry  = use_global_registry
+        self.registry             = TABLE_REGISTRY if use_global_registry else {}
+        self.db_path              = db_path
+        self.table_storage_root   = table_storage_root
+        self.use_external_storage = table_storage_root is not None
+
+    def connect(self):
+        if not self.use_external_storage:
+            sqlite3.register_adapter(np.ndarray, adapt_array)
+            sqlite3.register_converter("ndarray", convert_array)
+        self.con = sqlite3.connect(self.db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+
+    def is_connected(self):
+        return self.con is not None
+
     def init_tables(self):
+        if self.con is None:
+            return
         if self.tables_initialized:
             return
         cur = self.con.cursor()
@@ -256,8 +265,13 @@ class DatabaseContext:
             init_fn(self.con)
         self.tables_initialized = True
 
+    def open(self):
+        self.connect()
+        self.init_tables()
+
     def close(self):
-        self.con.close()
+        if self.con is not None:
+            self.con.close()
 
     def insert(self, *args, **kwargs):
         self.insert_fn(self, *args, **kwargs)
@@ -272,7 +286,7 @@ class DatabaseContext:
         self.update_fn(self, what, *args, **kwargs)
 
     def __enter__(self):
-        self.init_tables()
+        self.open()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
