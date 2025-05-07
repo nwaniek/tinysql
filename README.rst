@@ -293,89 +293,90 @@ passes each result row from a database query to the constructor of a class.
 Working with several databases
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Other times, you might want to work with several databases at the same time.
-While this is possible with ``tinysql``, there are some limitations you need to be
-aware of. To understand these limitations, it's necessary to look under the hood
-of how ``tinysql`` manages tables.
+Other times, you might want to work with several databases at the same time, and
+of course this is possible with ``tinysql``.
 
-When you use the ``db_enum`` or ``db_table`` decorator as in the examples above,
-then ``tinysql`` will store an entry into its 'global table registry'. You can
-inspect this registry if you want at runtime:
+By default, every call to ``db_table`` registers a table in a global registry,
+and also by default, every context inherits this registry. This is useful when
+working with several databases that have an identical layout. Other databases
+are not identical, and thus a ``DatabaseContext`` should map only those tables
+that actually reside in the database, or maybe you wish to use different
+contexts for different views into a database, effectively restricting the tables
+they can handle.
 
-.. code-block:: python
-
-    from typing import NamedTuple
-    import tinysql
-
-    @db_table(...) # map/register your class
-    class MyData(NamedTuple):
-        # ...
-
-    # list all tables globally known to tinysql
-    print(tinysql.TABLE_REGISTRY)
-
-
-When you create/open a connection to a database using ``setup_db``, then the
-DatabaseContext that is returned from the function call will inherit this global
-registry.
-
-To handle several databases, you need to register a class against a specific
-context. You also need to initialize the tables by either using the context as a
-context manager, or explicitly invoking its ``init_tables`` method. Here's an
-example for all of this:
+The default variant, meaning every context inherits all tables, looks like this:
 
 .. code-block:: python
 
-    from typing import NamedTuple
     from tinysql import db_table, DatabaseContext
 
-    # create two instances of DatabaseContext, each pointing to a particular
-    # sqlite database, and telling them to *not* use the global registry.
-    # If you wonder why tinysql defaults to a global registry? The reason is
-    # that, at least in my use cases, I more often work with databases with
-    # the same tables, or with just a single database connection. Using the
-    # global registry by default improves terseness slightly.
-    context1 = DatabaseContext('db1.sqlite', use_global_registry=False)
-    context2 = DatabaseContext('db2.sqlite', use_global_registry=False)
-
-    # register a table against a specific context.
-    @db_table("StringData", context=context1)
+    # register one table
+    @db_table("StringData")
     class StringData:
         data: str
 
-    # register another table against the other context
-    @db_table("FloatData", context=context2)
+    # register another table
+    @db_table("FloatData")
     class FloatData:
         data: float
 
-    # at this point, StringData will be only known to context1, while
-    # FloatData will only be known to context2. We need to make sure that the
-    # tables get initialized. This can be done either via a context manager, or
-    # explicitly:
+    # declare two contexts, inheriting the global registry
+    context1 = DatabaseContext("db1.sqlite", None)
+    context2 = DatabaseContext("db2.sqlite", None)
 
     with context1:
-        # do something with the context, like adding string data to this
-        # database
         context1.insert(StringData("wow!"))
+        context1.insert(FloatData(1.23))
+    # the same works for context2...
 
-    # Note that the connection to the database will be closed once the context
-    # manager goes out of context. That is, any further operation against the
-    # database with context1 will now fail
-    context1.insert(StringData("this will fail"))
+Next follows an example in which the two databases have different tables:
 
-    # the alternative is to explicitly initialize the tables by calling open.
+.. code-block:: python
+
+    from tinysql import db_table, DatabaseContext, TableNotMappedError
+
+    # register one table
+    @db_table("StringData")
+    class StringData:
+        data: str
+
+    # register another table
+    @db_table("FloatData")
+    class FloatData:
+        data: float
+
+    # declare two contexts, each having a specific registry defined by the
+    # classes argument that is passed in
+    context1 = DatabaseContext("db1.sqlite", None, classes=[StringData])
+    context2 = DatabaseContext("db2.sqlite", None, classes=[FloatData])
+
+    with context1:
+        context1.insert(StringData("wow!"))
+        # the next line will raise a TableNotMappedError, because context1
+        # doesn't know about FloatData
+        try:
+            context1.insert(FloatData(1.23))
+        except TableNotMappedError:
+            pass
+
+    # context2 only knows about FloatData. Instead of using a context manager,
+    # we can also use manual calls to open and initialize the database:
     context2.open()
     # if necessar,y finer control can be achieved by calling connect() and init_tables() on
     # the context instead of open():
-    # context2.connect()
-    # context2.init_tables()
-
+    #context2.connect()
+    #context2.init_tables()
     # now we can use the context
     context2.insert(FloatData(42.0))
     # make sure to close the context when you're done. This will close the
     # connection to the database
     context2.close()
 
+You can also completely disable the global registry after importing tinysql:
+
+.. code-block:: python
+   import tinysql
+   tinysql.configure(use_global_registry=False)
 
 
 
