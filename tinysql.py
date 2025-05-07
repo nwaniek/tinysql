@@ -13,8 +13,35 @@ import numpy as np
 from uuid import uuid4
 
 
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 TABLE_REGISTRY = {}
+
+
+class TinySQLError(Exception):
+    """Base class for all tinysql errors."""
+
+class TableNotMappedError(TinySQLError):
+    """Raised when a class is used with a context where its table is not registered."""
+
+class _TinySQLConfig:
+    def __init__(self):
+        self.use_global_registry = True
+        self._locked = False
+
+    def configure(self, *,
+                  use_global_registry: bool = True
+                  ):
+        if self._locked:
+            raise RuntimeError("tinysql is already in use; config must be set before decorators are applied.")
+        self.use_global_registry = use_global_registry
+
+    def lock(self):
+        self._locked = True
+
+config = _TinySQLConfig()
+
+def configure(**kwargs):
+    config.configure(**kwargs)
 
 
 class TypeFlags(Flag):
@@ -215,8 +242,9 @@ class Not(Condition):
 
 
 class DatabaseContext:
-    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, use_global_registry: bool = True):
-        self.set_paths(db_path, table_storage_root, use_global_registry)
+    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, classes: List[Type[Any]] | Type[Any] | None = None):
+        self.set_paths(db_path, table_storage_root)
+        self.registry             = TABLE_REGISTRY if not classes else build_registry(classes)
         self.con                  = None
         self.insert_fn            = insert
         self.select_fn            = select
@@ -224,14 +252,12 @@ class DatabaseContext:
         self.update_fn            = update
         self.tables_initialized   = False
 
-    def set_paths(self, db_path: Path | str, table_storage_root: Path | str | None, use_global_registry: bool = True):
+    def set_paths(self, db_path: Path | str, table_storage_root: Path | str | None):
         # sanitize paths
         db_path = Path(db_path) if isinstance(db_path, str) else db_path
         table_storage_root = Path(table_storage_root) if isinstance(table_storage_root, str) else table_storage_root
 
         # initialize members according to path configuration
-        self.use_global_registry  = use_global_registry
-        self.registry             = TABLE_REGISTRY if use_global_registry else {}
         self.db_path              = db_path
         self.table_storage_root   = table_storage_root
         self.use_external_storage = table_storage_root is not None
@@ -337,17 +363,40 @@ def sql_builder_select(tspec: TableSpec) -> str:
     return sql
 
 
-def register_tspec(registry, cls, tablename: str, tspec: TableSpec, init_fn: Callable | None):
+def register_tspec(cls, tablename: str, tspec: TableSpec, init_fn: Callable | None):
     cls._tinysql_tspec = tspec
     cls._tinysql_init_fn = init_fn
     cls._tinysql_insert = sql_builder_insert(tspec, False)
     cls._tinysql_insert_replace = sql_builder_insert(tspec, True)
     cls._tinysql_select = sql_builder_select(tspec)
-    registry[tablename] = TableRegistryEntry(tspec, init_fn, cls)
+    if config.use_global_registry:
+        config.lock()
+        if tablename in TABLE_REGISTRY:
+            raise ValueError(f"Duplicate table name detected in global registry: {tablename}")
+        TABLE_REGISTRY[tablename] = TableRegistryEntry(tspec, init_fn, cls)
     return cls
 
 
-def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys: List[Tuple[str, str]] | None = None, init_fn: Callable | None = None,  context: DatabaseContext | None = None):
+def safe_getattr(cls: Any, attr: str):
+    if not hasattr(cls, attr):
+        raise AttributeError(f"Class {cls.__name__} is not registered with tinysql. Did you forget the db_table decorator?")
+    return getattr(cls, attr)
+
+
+def build_registry(classes: List[Type[Any]] | Type[Any]):
+    registry = {}
+    if not isinstance(classes, list):
+        classes = [classes]
+    for cls in classes:
+        tspec   = safe_getattr(cls, "_tinysql_tspec")
+        init_fn = safe_getattr(cls, "_tinysql_init_fn")
+        if tspec.name in registry:
+            raise ValueError(f"Duplicate table name detected: {tspec.tablename}")
+        registry[tspec.name] = TableRegistryEntry(tspec, init_fn, cls)
+    return registry
+
+
+def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys: List[Tuple[str, str]] | None = None, init_fn: Callable | None = None):
     def decorator(cls):
         ts = TableSpec(tablename)
         annotations = get_type_hints(cls)
@@ -371,12 +420,7 @@ def db_table(tablename: str, primary_keys: List[str] | None = None, foreign_keys
 
         ts.primary_keys = primary_keys or []
         ts.foreign_keys = foreign_keys or []
-
-        registry = context.registry if context else TABLE_REGISTRY
-        if tablename in registry:
-            raise ValueError(f"Duplicate table name detected: {tablename}")
-
-        cls = register_tspec(registry, cls, tablename, ts, init_fn)
+        cls = register_tspec(cls, tablename, ts, init_fn)
         return cls
     return decorator
 
@@ -392,7 +436,7 @@ class db_enum_initfn:
         con.commit()
 
 
-def db_enum(tablename: str, descriptions: Dict[str, str] = {}, context: DatabaseContext | None = None):
+def db_enum(tablename: str, descriptions: Dict[str, str] = {}):
     def decorator(cls):
         # test type of members. cannot work with mixed type enums
         types = [type(f.value) for f in cls]
@@ -406,12 +450,8 @@ def db_enum(tablename: str, descriptions: Dict[str, str] = {}, context: Database
         ts.fields.description = TYPE_MAPPING[str]
         ts.primary_keys       = ["value"]
 
-        registry = context.registry if context else TABLE_REGISTRY
-        if tablename in registry:
-            raise ValueError(f"Duplicate table name detected: {tablename}")
-
         init_fn = db_enum_initfn(tablename, [(f.value, f._name_, descriptions.get(f._name_, "")) for f in cls])
-        cls = register_tspec(registry, cls, tablename, ts, init_fn)
+        cls = register_tspec(cls, tablename, ts, init_fn)
         return cls
     return decorator
 
@@ -504,11 +544,16 @@ def insert_from_dict(context: DatabaseContext, data: Dict, tspec: TableSpec, rep
 
 def insert(context: DatabaseContext, data, tspec: TableSpec | None = None, replace = True):
     if hasattr(data, '_tinysql_tspec'):
+        tspec = getattr(data, '_tinysql_tspec')
+        if tspec and (tspec.name not in context.registry):
+            raise TableNotMappedError(f"Table '{tspec.name}' not mapped with the given context for database '{context.db_path}'.")
         insert_from_class(context, data, replace)
 
     elif isinstance(data, dict):
         if tspec is None:
-            raise RuntimeError(f"TableSpec must be provided for dictionary")
+            raise TinySQLError(f"TableSpec must be provided for dictionary")
+        if tspec.name not in context.registry:
+            raise TableNotMappedError(f"Table '{tspec.name}' not mapped with the given context for database '{context.db_path}'.")
         insert_from_dict(context, data, tspec, replace)
 
     else:
@@ -693,6 +738,6 @@ def convert_array(text) -> np.ndarray:
 
 def setup_db(db_path: Path | str, table_storage_root: Path | str | None):
     # this will use the global table registry, and also init the tables
-    context = DatabaseContext(db_path, table_storage_root, use_global_registry=True)
+    context = DatabaseContext(db_path, table_storage_root)
     context.init_tables()
     return context

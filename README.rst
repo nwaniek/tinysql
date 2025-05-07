@@ -363,13 +363,20 @@ example for all of this:
     # database with context1 will now fail
     context1.insert(StringData("this will fail"))
 
-    # the alternative is to explicitly initialize the tables.
-    context2.init_tables()
-    # and then use it
+    # the alternative is to explicitly initialize the tables by calling open.
+    context2.open()
+    # if necessar,y finer control can be achieved by calling connect() and init_tables() on
+    # the context instead of open():
+    # context2.connect()
+    # context2.init_tables()
+
+    # now we can use the context
     context2.insert(FloatData(42.0))
     # make sure to close the context when you're done. This will close the
     # connection to the database
     context2.close()
+
+
 
 
 Extending tinysql with other types
