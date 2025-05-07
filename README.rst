@@ -375,6 +375,7 @@ Next follows an example in which the two databases have different tables:
 You can also completely disable the global registry after importing tinysql:
 
 .. code-block:: python
+
    import tinysql
    tinysql.configure(use_global_registry=False)
 
