@@ -25,9 +25,9 @@ class OtherValues:
 # the following should print an empty dict
 print(tinysql.TABLE_REGISTRY)
 
-context1 = tinysql.DatabaseContext('db1.sqlite', None, classes=[AmazingValues])
-context2 = tinysql.DatabaseContext('db2.sqlite', None, classes=[OtherValues])
-context3 = tinysql.DatabaseContext('db3.sqlite', None, classes=[AmazingValues, OtherValues])
+context1 = tinysql.DatabaseContext('db1.sqlite', None, [AmazingValues])
+context2 = tinysql.DatabaseContext('db2.sqlite', None, [OtherValues])
+context3 = tinysql.DatabaseContext('db3.sqlite', None, [AmazingValues, OtherValues])
 
 # this should print one entry per dictionary each
 print(context1.registry)

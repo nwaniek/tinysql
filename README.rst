@@ -244,11 +244,11 @@ sqlite's autoinc in the `sqlite documentation <https://www.sqlite.org/autoinc.ht
     my_data = FancyData(autoinc(), 'really amazing data!')
 
 There's another subtle issue with autoinc, namely when using tinysql with an
-external storage for BLOBs. At the time of writing an entry into the
-database, or more precisely before writing the data to the table, the value of
-the autoinc field might not yet be determined. Yet, the primary key(s) of a
-mapped/registered class will be used in the production of the filename where
-the ndarray will be stored.
+external storage for BLOBs (see further below). At the time of writing an entry
+into the database, or more precisely before writing the data to the table, the
+value of the autoinc field might not yet be determined. Yet, the primary key(s)
+of a mapped/registered class will be used in the production of the filename
+where the ndarray will be stored.
 
 As a general recommendation: don't mix autoinc fields with BLOB fields in one
 class. Rather, use another form of primary key, something that can be determined
@@ -347,8 +347,8 @@ Next follows an example in which the two databases have different tables:
 
     # declare two contexts, each having a specific registry defined by the
     # classes argument that is passed in
-    context1 = DatabaseContext("db1.sqlite", None, classes=[StringData])
-    context2 = DatabaseContext("db2.sqlite", None, classes=[FloatData])
+    context1 = DatabaseContext("db1.sqlite", None, [StringData])
+    context2 = DatabaseContext("db2.sqlite", None, [FloatData])
 
     with context1:
         context1.insert(StringData("wow!"))
@@ -378,6 +378,35 @@ You can also completely disable the global registry after importing tinysql:
 
    import tinysql
    tinysql.configure(use_global_registry=False)
+
+
+External Table Storage
+~~~~~~~~~~~~~~~~~~~~~~
+
+If you have read the above example, then you might wonder what the second
+argument, ``None``, in the constructor of ``DatabaseContext`` is about.
+
+``tinysql`` allows to store BLOBs, such as numpy arrays or other large binary
+objects, outside of the database itself. This can be useful when sharing such
+files with colleagues, while not having to share the entire sqlite database. To
+enable the external data storage, you simply need to pass the path to a folder
+in which the external data should be stored to a ``DatabaseContext``.
+
+.. code-block:: python
+
+    # database (context) with external data storage
+    context = tinysql.DatabaseContext('test.sqlite', 'test_storage')
+
+In this example, ``tinysql`` will now store BLOB types within directory
+``test_storage``. More precisely, it will create sub-directories based on the
+table/class name, and files with filenames based on the primary keys of the
+table and the actual field name which should be stored.
+
+``tinysql`` will store numpy arrays as ``npz`` files, and use ``pickle`` for all
+objects of type ``bytes``, ``bytearray``, or ``memoryview``. Further types can
+be treated under the external table storage approach by adding them to
+``tinysql``'s ``TYPE_MAPPING`` variable and setting the flag to
+``TypeFlags.BLOB`` (see ``tinysql.py`` for examples).
 
 
 

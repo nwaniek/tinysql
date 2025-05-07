@@ -242,7 +242,7 @@ class Not(Condition):
 
 
 class DatabaseContext:
-    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None, classes: List[Type[Any]] | Type[Any] | None = None):
+    def __init__(self, db_path: Path | str, table_storage_root: Path | str | None = None, classes: List[Type[Any]] | Type[Any] | None = None):
         self.set_paths(db_path, table_storage_root)
         self.registry             = TABLE_REGISTRY if not classes else build_registry(classes)
         self.con                  = None
